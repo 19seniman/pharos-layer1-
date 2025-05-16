@@ -226,7 +226,7 @@ const performSwap = async (wallet, provider, index) => {
 
 const transferPHRS = async (wallet, provider, index) => {
   try {
-    const amount = 0.000001; 
+    const amount = 0.00000019; 
     const randomWallet = ethers.Wallet.createRandom();
     const toAddress = randomWallet.address;
     logger.step(`Preparing PHRS transfer ${index + 1}: ${amount} PHRS to ${toAddress}`);
