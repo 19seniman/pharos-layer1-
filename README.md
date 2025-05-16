@@ -34,7 +34,7 @@ Register pharos Testnet : https://testnet.pharosnetwork.xyz/experience?inviteCod
 1. Clone the repository:
    ```bash
    git clone https://github.com/19seniman/pharos-layer1-.git
-   cd pharos-layer1
+   cd pharos-layer1-
    ```
 
 2. Install dependencies:
