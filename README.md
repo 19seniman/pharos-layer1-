@@ -1,15 +1,7 @@
-# Pharos Testnet Auto Bot
+# Pharos Testnet layer 1 Auto Bot
 
 An automated bot for interacting with the Pharos Testnet, performing swaps, transfers, faucet claims, and daily check-ins to potentially qualify for airdrops.
 
-## Features ✨
-
-- **Automated Swaps**: Performs random swaps between WPHRS and USDC tokens
-- **PHRS Transfers**: Sends small amounts of PHRS to random addresses
-- **Faucet Claims**: Automatically claims testnet tokens from the faucet
-- **Daily Check-ins**: Completes daily check-in tasks for potential rewards
-- **Proxy Support**: Rotates proxies for each operation (if provided)
-- **Multi-wallet Support**: Processes multiple wallets sequentially
 
 ## Prerequisites 📋
 
@@ -18,12 +10,24 @@ An automated bot for interacting with the Pharos Testnet, performing swaps, tran
 - Pharos Testnet wallet with private keys
 - (Optional) Proxy list in `proxies.txt`
 
+```
+Register pharos Testnet : https://testnet.pharosnetwork.xyz/experience?inviteCode=XyMMxO15RzVwndcj ```
+
+🔲Connect Wallet 
+🔲Tautkan X & Discod
+🔲 Claim Faucet : Faucet https://testnet.pharosnetwork.xyz/
+🔲 Check in 
+🔲 Swap 10x
+🔲 Add LP 10x
+🔲 Send Token Pharos other walllet ( your friends ) 10x
+✅Done lakukan setiap hari
+
 ## Installation ⚙️
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/vikitoshi/Pharos-Auto-Bot.git
-   cd Pharos-Auto-Bot
+   git clone https://github.com/19seniman/pharos-layer1-.git
+   cd pharos-layer1
    ```
 
 2. Install dependencies:
@@ -31,7 +35,7 @@ An automated bot for interacting with the Pharos Testnet, performing swaps, tran
    npm install
    ```
 
-3. Create a `.env` file in the root directory with your private keys:
+3. nano .env 
    ```
    PRIVATE_KEY_1=your_first_private_key_here
    PRIVATE_KEY_2=your_second_private_key_here
@@ -69,26 +73,6 @@ The bot will:
    - Execute 10 token swaps
 4. Repeat every 30 minutes
 
-## Logging 📝
-
-The bot provides color-coded logs:
-- ✅ Success messages (green)
-- ⚠️ Warnings (yellow)
-- ❌ Errors (red)
-- 🔄 Loading/process indicators (cyan)
-- ➤ Step-by-step actions (white)
-
-## Important Notes ⚠️
-
-1. This bot is for TESTNET use only
-2. Never use mainnet private keys
-3. The bot runs indefinitely until stopped (Ctrl+C)
-4. All transactions use 0 gas price (testnet feature)
-5. The bot includes random delays between operations
-
-## Support 💬
-
-For issues or questions, please open an issue on GitHub.
 
 ## Disclaimer ⚠️
 
