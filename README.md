@@ -14,12 +14,19 @@ An automated bot for interacting with the Pharos Testnet, performing swaps, tran
 Register pharos Testnet : https://testnet.pharosnetwork.xyz/experience?inviteCode=XyMMxO15RzVwndcj 
 
 🔲Connect Wallet 
+
 🔲Tautkan X & Discod
+
 🔲 Claim Faucet : Faucet https://testnet.pharosnetwork.xyz/
+
 🔲 Check in 
+
 🔲 Swap 10x
-🔲 Add LP 10x
+
+🔲 Add Liquidity 10x
+
 🔲 Send Token Pharos other walllet ( your friends ) 10x
+
 ✅Done lakukan setiap hari
 
 ## Installation ⚙️
