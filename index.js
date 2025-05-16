@@ -25,7 +25,7 @@ const logger = {
   banner: () => {
     console.log(`${colors.cyan}${colors.bold}`);
     console.log('-------------------------------------------------');
-    console.log(' Pharos Testnet Auto Bot - Airdrop Insiders');
+    console.log(' 19Seniman From Insider - FREE PALESTINE ');
     console.log('-------------------------------------------------');
     console.log(`${colors.reset}\n`);
   },
