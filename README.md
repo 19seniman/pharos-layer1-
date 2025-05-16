@@ -10,8 +10,8 @@ An automated bot for interacting with the Pharos Testnet, performing swaps, tran
 - Pharos Testnet wallet with private keys
 - (Optional) Proxy list in `proxies.txt`
 
-```
-Register pharos Testnet : https://testnet.pharosnetwork.xyz/experience?inviteCode=XyMMxO15RzVwndcj ```
+
+Register pharos Testnet : https://testnet.pharosnetwork.xyz/experience?inviteCode=XyMMxO15RzVwndcj 
 
 🔲Connect Wallet 
 🔲Tautkan X & Discod
