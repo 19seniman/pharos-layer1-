@@ -50,7 +50,7 @@ https://t.me/blockchainproject_19
 
 2. Install dependencies:
    ```bash
-   npm install|
+   npm install
    npm install prompt-sync
    ```
 
