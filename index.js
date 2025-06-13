@@ -28,7 +28,7 @@ const logger = {
   banner: () => {
     console.log(`${colors.cyan}${colors.bold}`);
     console.log('-------------------------------------------------');
-    console.log(' 1🍉🍉🍉 9Seniman from Insider - FREE PALESTINE 🍉🍉🍉');
+    console.log(' 🍉🍉🍉 19Seniman from Insider - FREE PALESTINE 🍉🍉🍉');
     console.log('-------------------------------------------------');
     console.log(`${colors.reset}\n`);
   },
