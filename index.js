@@ -5,7 +5,6 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const randomUser agent = require('random-useragent');
 const axios = require('axios');
 const prompt = require('prompt-sync')({ sigint: true });
-const figlet = require('figlet');
 const chalk = require('chalk');
 
 const colors = {
@@ -28,20 +27,15 @@ const logger = {
   step: (msg) => console.log(`${colors.white}[➤] ${msg}${colors.reset}`),
   user: (msg) => console.log(`\n${colors.white}[➤] ${msg}${colors.reset}`),
   banner: () => {
-    figlet.text('19Seniman from Insider - FREE PALESTINE', { font: 'Banner4' }, (err, data) => {
-      if (err) {
-        console.log('Error generating banner');
-        return;
-      }
-      const coloredData = data.split('\n').map((line, index) => {
-        return index % 2 === 0 ? chalk.red(line) : chalk.white(line);
-      }).join('\n');
-      console.log(`${colors.cyan}${colors.bold}`);
-      console.log('-------------------------------------------------');
-      console.log(coloredData);
-      console.log('-------------------------------------------------');
-      console.log(`${colors.reset}\n`);
-    });
+    console.log(`${colors.cyan}${colors.bold}`);
+    console.log('-------------------------------------------------');
+    const bannerText = '19Seniman from Insider - FREE PALESTINE';
+    const coloredBanner = bannerText.split('').map((char, index) => {
+      return index % 2 === 0 ? chalk.red(char) : chalk.white(char);
+    }).join('');
+    console.log(coloredBanner);
+    console.log('-------------------------------------------------');
+    console.log(`${colors.reset}\n`);
   },
 };
 
@@ -416,4 +410,9 @@ const performSwap = async (wallet, provider, index, jwt, proxy) => {
     logger.loading(`Swap transaction ${index + 1} sent, waiting for confirmation...`);
     const receipt = await waitForTransactionWithRetry(provider, tx.hash);
     logger.success(`Swap ${index + 1} completed: ${receipt.hash}`);
-    logger.step(`Explorer: https://testnet.pharosscan.xyz/
+    logger.step(`Explorer: https://testnet.pharosscan.xyz/tx/${receipt.hash}`);
+
+    await verifyTask(wallet, proxy, jwt, receipt.hash);
+  } catch (error) {
+    logger.error(`Swap ${index + 1} failed: ${error.message}`);
+    if (error
