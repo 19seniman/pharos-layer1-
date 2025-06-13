@@ -20,7 +20,6 @@ const figlet = require('figlet');
 const chalk = require('chalk');
 
 const logger = {
-  // ... (fungsi lainnya tetap sama)
   banner: () => {
     figlet.text('19Seniman from Insider - FREE PALESTINE', { font: 'Banner4' }, (err, data) => {
       if (err) {
