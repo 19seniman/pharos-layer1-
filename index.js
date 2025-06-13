@@ -2,7 +2,7 @@ require('dotenv').config();
 const { ethers } = require('ethers');
 const fs = require('fs');
 const { HttpsProxyAgent } = require('https-proxy-agent');
-const randomUser agent = require('random-useragent');
+const randomUser agent = require('random-useragent'); // Perbaikan di sini
 const axios = require('axios');
 const prompt = require('prompt-sync')({ sigint: true });
 const chalk = require('chalk');
@@ -409,10 +409,4 @@ const performSwap = async (wallet, provider, index, jwt, proxy) => {
 
     logger.loading(`Swap transaction ${index + 1} sent, waiting for confirmation...`);
     const receipt = await waitForTransactionWithRetry(provider, tx.hash);
-    logger.success(`Swap ${index + 1} completed: ${receipt.hash}`);
-    logger.step(`Explorer: https://testnet.pharosscan.xyz/tx/${receipt.hash}`);
-
-    await verifyTask(wallet, proxy, jwt, receipt.hash);
-  } catch (error) {
-    logger.error(`Swap ${index + 1} failed: ${error.message}`);
-    if (error
+    logger.success(`Swap ${index + 
