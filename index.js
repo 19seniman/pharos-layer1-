@@ -16,23 +16,29 @@ const colors = {
   bold: '\x1b[1m',
 };
 
+const figlet = require('figlet');
+const chalk = require('chalk');
+
 const logger = {
-  info: (msg) => console.log(`${colors.green}[✓] ${msg}${colors.reset}`),
-  wallet: (msg) => console.log(`${colors.yellow}[➤] ${msg}${colors.reset}`),
-  warn: (msg) => console.log(`${colors.yellow}[!] ${msg}${colors.reset}`),
-  error: (msg) => console.log(`${colors.red}[✗] ${msg}${colors.reset}`),
-  success: (msg) => console.log(`${colors.green}[+] ${msg}${colors.reset}`),
-  loading: (msg) => console.log(`${colors.cyan}[⟳] ${msg}${colors.reset}`),
-  step: (msg) => console.log(`${colors.white}[➤] ${msg}${colors.reset}`),
-  user: (msg) => console.log(`\n${colors.white}[➤] ${msg}${colors.reset}`),
+  // ... (fungsi lainnya tetap sama)
   banner: () => {
-    console.log(`${colors.cyan}${colors.bold}`);
-    console.log('-------------------------------------------------');
-    console.log(' 🍉🍉🍉 19Seniman from Insider - FREE PALESTINE 🍉🍉🍉');
-    console.log('-------------------------------------------------');
-    console.log(`${colors.reset}\n`);
+    figlet.text('19Seniman from Insider - FREE PALESTINE', { font: 'Banner4' }, (err, data) => {
+      if (err) {
+        console.log('Error generating banner');
+        return;
+      }
+      const coloredData = data.split('\n').map((line, index) => {
+        return index % 2 === 0 ? chalk.red(line) : chalk.white(line);
+      }).join('\n');
+      console.log(`${colors.cyan}${colors.bold}`);
+      console.log('-------------------------------------------------');
+      console.log(coloredData);
+      console.log('-------------------------------------------------');
+      console.log(`${colors.reset}\n`);
+    });
   },
 };
+
 
 const networkConfig = {
   name: 'Pharos Testnet',
