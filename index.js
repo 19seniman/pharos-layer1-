@@ -49,8 +49,8 @@ const tokens = {
 };
 
 const poolAddresses = {
-  USDC_USDT: '0x3b6253ce8dac4b87cf43e02de3a2a9b02dce1be1',
-  USDT_WPHRS: '0x95a11bd0e5441786bc290ed4c5fc3f1147e5b784',
+  USDC_WPHRS: '0x0373a059321219745aee4fad8a942cf088be3d0e',
+  USDT_WPHRS: '0x70118b6eec45329e0534d849bc3e588bb6752527',
 };
 
 const contractAddress = '0x1a4de519154ae51200b0ad7c90f7fac75547888a';
