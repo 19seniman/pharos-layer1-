@@ -792,10 +792,10 @@ const main = async () => {
     return;
   }
 
-  const numTransfers = 10;
-  const numWraps = 10;
-  const numSwaps = 10;
-  const numLPs = 10;
+  const numTransfers = 120;
+  const numWraps = 120;
+  const numSwaps = 120;
+  const numLPs = 120;
 
   while (true) {
     for (const privateKey of privateKeys) {
