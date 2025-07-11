@@ -883,10 +883,10 @@ const main = async () => {
     return;
   }
 
-  const numTransfers = 10;
-  const numWraps = 10;
-  const numSwaps = 10;
-  const numLPs = 10;
+  const numTransfers = 110;
+  const numWraps = 110;
+  const numSwaps = 110;
+  const numLPs = 110;
 
   while (true) {
     for (const privateKey of privateKeys) {
