@@ -29,6 +29,7 @@ const loggerTheme = {
   cyan: "\x1b[36m",
   white: "\x1b[37m",
   bgGray: "\x1b[100m",
+  gold: "\x1b[33m", // Gunakan kuning sebagai warna emas
 };
 
 const fancyBox = (title, subtitle) => {
@@ -49,9 +50,9 @@ const logger = {
   success: (msg) => console.log(`${loggerTheme.green}[ ✔ DONE ] → ${msg}${loggerTheme.reset}`),
   loading: (msg) => console.log(`${loggerTheme.cyan}[ ⌛ LOADING ] → ${msg}${loggerTheme.reset}`),
   step: (msg) => console.log(`${loggerTheme.magenta}[ ➔ STEP ] → ${msg}${loggerTheme.reset}`),
+  wallet: (msg) => console.log(`${loggerTheme.gold}[ 💰 WALLET ] → ${msg}${loggerTheme.reset}`),
   banner: () => fancyBox(' 🍉🍉 Free Plestine 🍉🍉', '— 19Seniman From Insider 🏴‍☠️ —'),
 };
-
 const networkConfig = {
   name: 'Pharos Testnet',
   chainId: 688688,
