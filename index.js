@@ -16,22 +16,26 @@ const colors = {
   bold: '\x1b[1m',
 };
 
+const fancyBox = (title, subtitle) => {
+  console.log(`${loggerTheme.cyan}${loggerTheme.bold}`);
+  console.log('╔══════════════════════════════════════════════╗');
+  console.log(`║  ${title.padEnd(42)}  ║`);
+  if (subtitle) {
+    console.log(`║  ${subtitle.padEnd(42)}  ║`);
+  }
+  console.log('╚══════════════════════════════════════════════╝');
+  console.log(loggerTheme.reset);
+};
+
 const logger = {
-  info: (msg) => console.log(`${colors.green}[✓] ${msg}${colors.reset}`),
-  wallet: (msg) => console.log(`${colors.yellow}[➤] ${msg}${colors.reset}`),
-  warn: (msg) => console.log(`${colors.yellow}[!] ${msg}${colors.reset}`),
-  error: (msg) => console.log(`${colors.red}[✗] ${msg}${colors.reset}`),
-  success: (msg) => console.log(`${colors.green}[+] ${msg}${colors.reset}`),
-  loading: (msg) => console.log(`${colors.cyan}[⟳] ${msg}${colors.reset}`),
-  step: (msg) => console.log(`${colors.white}[➤] ${msg}${colors.reset}`),
-  user: (msg) => console.log(`\n${colors.white}[➤] ${msg}${colors.reset}`),
-  banner: () => {
-    console.log(`${colors.cyan}${colors.bold}`);
-    console.log('-------------------------------------------------');
-    console.log(' Pharos Testnet Auto Bot - Airdrop Insiders');
-    console.log('-------------------------------------------------');
-    console.log(`${colors.reset}\n`);
-  },
+  info: (msg) => console.log(`${loggerTheme.blue}[ ℹ INFO ] → ${msg}${loggerTheme.reset}`),
+  warn: (msg) => console.log(`${loggerTheme.yellow}[ ⚠ WARNING ] → ${msg}${loggerTheme.reset}`),
+  error: (msg) => console.log(`${loggerTheme.red}[ ✖ ERROR ] → ${msg}${loggerTheme.reset}`),
+  success: (msg) => console.log(`${loggerTheme.green}[ ✔ DONE ] → ${msg}${loggerTheme.reset}`),
+  loading: (msg) => console.log(`${loggerTheme.cyan}[ ⌛ LOADING ] → ${msg}${loggerTheme.reset}`),
+  step: (msg) => console.log(`${loggerTheme.magenta}[ ➔ STEP ] → ${msg}${loggerTheme.reset}`),
+  wallet: (msg) => console.log(`${loggerTheme.gold}[ 💰 WALLET ] → ${msg}${loggerTheme.reset}`),
+  banner: () => fancyBox(' 🍉🍉 Free Plestine 🍉🍉', '— 19Seniman From Insider 🏴‍☠️ —'),
 };
 
 const networkConfig = {
@@ -231,11 +235,11 @@ const checkBalanceAndApproval = async (wallet, tokenAddress, amount, decimals, s
       
       const gasOptions = await getGasOptions(wallet.provider);
       
-      const estimatedGas = await tokenContract.approve.estimateGas(spender, ethers.MaxUint256);
+      const estimatedGas = await tokenContract.approve.estimateGas(spender, ethers.MaxUint256, { from: wallet.address, ...gasOptions });
       
       const approveTx = await tokenContract.approve(spender, ethers.MaxUint256, {
         gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
-        ...gasOptions, // Spread the gas options here
+        ...gasOptions,
       });
       const receipt = await waitForTransactionWithRetry(wallet.provider, approveTx.hash);
       logger.success('Approval completed');
@@ -296,7 +300,9 @@ const getUserInfo = async (wallet, proxy = null, jwt) => {
 const verifyTask = async (wallet, proxy, jwt, txHash) => {
   try {
     logger.step(`Verifying task ID 103 for transaction: ${txHash}`);
-    const verifyUrl = `https://api.pharosnetwork.xyz/task/verify?address=${wallet.address}&task_id=103&tx_hash=${txHash}`;
+    // Hapus '0x' dari txHash jika ada
+    const cleanTxHash = txHash.startsWith('0x') ? txHash.substring(2) : txHash;
+    const verifyUrl = `https://api.pharosnetwork.xyz/task/verify?address=${wallet.address}&task_id=103&tx_hash=${cleanTxHash}`;
     
     const headers = {
       accept: "application/json, text/plain, */*",
@@ -410,7 +416,7 @@ const performSwap = async (wallet, provider, index, jwt, proxy) => {
     try {
       estimatedGas = await contract.multicall.estimateGas(deadline, multicallData, {
         from: wallet.address,
-        ...gasOptions, // Include gas options for estimation
+        ...gasOptions,
       });
     } catch (error) {
       logger.error(`Gas estimation failed for swap ${index + 1}: ${error.message}`);
@@ -419,7 +425,7 @@ const performSwap = async (wallet, provider, index, jwt, proxy) => {
 
     const tx = await contract.multicall(deadline, multicallData, {
       gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
-      ...gasOptions, // Spread the gas options here
+      ...gasOptions,
     });
 
     logger.loading(`Swap transaction ${index + 1} sent, waiting for confirmation...`);
@@ -460,7 +466,7 @@ const transferPHRS = async (wallet, provider, index, jwt, proxy) => {
       to: toAddress,
       value: required,
       gasLimit: 21000,
-      ...gasOptions, // Spread the gas options here
+      ...gasOptions,
     });
 
     logger.loading(`Transfer transaction ${index + 1} sent, waiting for confirmation...`);
@@ -509,7 +515,7 @@ const wrapPHRS = async (wallet, provider, index, jwt, proxy) => {
     const tx = await wphrsContract.deposit({
       value: amountWei,
       gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
-      ...gasOptions, // Spread the gas options here
+      ...gasOptions,
     });
 
     logger.loading(`Wrap transaction ${index + 1} sent, waiting for confirmation...`);
@@ -747,7 +753,7 @@ const addLiquidity = async (wallet, provider, index, jwt, proxy) => {
 
     const tx = await positionManager.mint(mintParams, {
       gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
-      ...gasOptions, // Spread the gas options here
+      ...gasOptions,
     });
 
     logger.loading(`Liquidity Add ${index + 1} sent, waiting for confirmation...`);
