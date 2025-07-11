@@ -14,31 +14,31 @@ const colors = {
   red: '\x1b[31m',
   white: '\x1b[37m',
   bold: '\x1b[1m',
-  blue: '\x1b[34m', // Menambahkan warna biru
-  magenta: '\x1b[35m', // Menambahkan warna magenta
-  gold: '\x1b[33;1m', // Menambahkan warna gold (kuning tebal)
+  blue: '\x1b[34m',
+  magenta: '\x1b[35m',
+  gold: '\x1b[33;1m',
 };
 
 const fancyBox = (title, subtitle) => {
-  console.log(`${colors.cyan}${colors.bold}`); // Menggunakan 'colors'
+  console.log(`${colors.cyan}${colors.bold}`);
   console.log('╔══════════════════════════════════════════════╗');
   console.log(`║  ${title.padEnd(42)}  ║`);
   if (subtitle) {
     console.log(`║  ${subtitle.padEnd(42)}  ║`);
   }
   console.log('╚══════════════════════════════════════════════╝');
-  console.log(colors.reset); // Menggunakan 'colors'
+  console.log(colors.reset);
 };
 
 const logger = {
-  info: (msg) => console.log(`${colors.blue}[ ℹ INFO ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
-  warn: (msg) => console.log(`${colors.yellow}[ ⚠ WARNING ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
-  error: (msg) => console.log(`${colors.red}[ ✖ ERROR ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
-  success: (msg) => console.log(`${colors.green}[ ✔ DONE ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
-  loading: (msg) => console.log(`${colors.cyan}[ ⌛ LOADING ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
-  step: (msg) => console.log(`${colors.magenta}[ ➔ STEP ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
-  wallet: (msg) => console.log(`${colors.gold}[ 💰 WALLET ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
-  user: (msg) => console.log(`\n${colors.white}[➤] ${msg}${colors.reset}`), // Tambahkan logger.user yang hilang
+  info: (msg) => console.log(`${colors.blue}[ ℹ INFO ] → ${msg}${colors.reset}`),
+  warn: (msg) => console.log(`${colors.yellow}[ ⚠ WARNING ] → ${msg}${colors.reset}`),
+  error: (msg) => console.log(`${colors.red}[ ✖ ERROR ] → ${msg}${colors.reset}`),
+  success: (msg) => console.log(`${colors.green}[ ✔ DONE ] → ${msg}${colors.reset}`),
+  loading: (msg) => console.log(`${colors.cyan}[ ⌛ LOADING ] → ${msg}${colors.reset}`),
+  step: (msg) => console.log(`${colors.magenta}[ ➔ STEP ] → ${msg}${colors.reset}`),
+  wallet: (msg) => console.log(`${colors.gold}[ 💰 WALLET ] → ${msg}${colors.reset}`),
+  user: (msg) => console.log(`\n${colors.white}[➤] ${msg}${colors.reset}`),
   banner: () => fancyBox(' 🍉🍉 Free Palestine 🍉🍉', '— 19Seniman From Insider 🏴‍☠️ —'),
 };
 
@@ -189,8 +189,8 @@ const waitForTransactionWithRetry = async (provider, txHash, maxRetries = 5, bas
       retries++;
     } catch (error) {
       logger.error(`Error fetching transaction receipt for ${txHash}: ${error.message}`);
-      if (error.code === -32008) {
-        logger.warn(`RPC error -32008, retrying (${retries + 1}/${maxRetries})...`);
+      if (error.code === -32008 || error.message.includes('TX_REPLAY_ATTACK')) { // Tambahkan penanganan TX_REPLAY_ATTACK
+        logger.warn(`RPC error (${error.code || 'UNKNOWN'}) or TX_REPLAY_ATTACK, retrying (${retries + 1}/${maxRetries})...`);
         await new Promise(resolve => setTimeout(resolve, baseDelayMs * Math.pow(2, retries)));
         retries++;
       } else {
@@ -205,18 +205,34 @@ const getGasOptions = async (provider) => {
   const feeData = await provider.getFeeData();
   const gasOptions = {};
 
-  // Prefer EIP-1559 (type 2) if maxFeePerGas and maxPriorityFeePerGas are available
   if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
     gasOptions.maxFeePerGas = feeData.maxFeePerGas;
     gasOptions.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
-  } else if (feeData.gasPrice) { // Fallback to legacy (type 0) if only gasPrice is available
+  } else if (feeData.gasPrice) {
     gasOptions.gasPrice = feeData.gasPrice;
   } else {
-    // Default to a sensible gasPrice if no fee data is available
     gasOptions.gasPrice = ethers.parseUnits('1', 'gwei');
   }
   return gasOptions;
 };
+
+// Objek untuk menyimpan nonce per alamat dompet
+const walletNonces = {};
+
+const getWalletNonce = async (wallet) => {
+    // Dapatkan nonce dari cache atau dari jaringan jika belum ada
+    let nonce = walletNonces[wallet.address];
+    if (typeof nonce === 'undefined') {
+        nonce = await wallet.provider.getTransactionCount(wallet.address, 'latest');
+        walletNonces[wallet.address] = nonce;
+    }
+    return nonce;
+};
+
+const incrementWalletNonce = (walletAddress) => {
+    walletNonces[walletAddress]++;
+};
+
 
 const checkBalanceAndApproval = async (wallet, tokenAddress, amount, decimals, spender) => {
   try {
@@ -238,13 +254,16 @@ const checkBalanceAndApproval = async (wallet, tokenAddress, amount, decimals, s
       logger.step(`Approving ${amount} tokens for ${spender}...`);
       
       const gasOptions = await getGasOptions(wallet.provider);
+      const nonce = await getWalletNonce(wallet); // Dapatkan nonce
       
       const estimatedGas = await tokenContract.approve.estimateGas(spender, ethers.MaxUint256, { from: wallet.address, ...gasOptions });
       
       const approveTx = await tokenContract.approve(spender, ethers.MaxUint256, {
         gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
+        nonce: nonce, // Gunakan nonce yang didapat
         ...gasOptions,
       });
+      incrementWalletNonce(wallet.address); // Increment nonce setelah transaksi dikirim
       const receipt = await waitForTransactionWithRetry(wallet.provider, approveTx.hash);
       logger.success('Approval completed');
     }
@@ -252,6 +271,11 @@ const checkBalanceAndApproval = async (wallet, tokenAddress, amount, decimals, s
     return true;
   } catch (error) {
     logger.error(`Balance/approval check failed: ${error.message}`);
+    // Jika ada error, coba perbarui nonce dari jaringan
+    if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
+        logger.warn('Nonce issue detected during approval, refreshing nonce...');
+        walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
+    }
     return false;
   }
 };
@@ -304,7 +328,6 @@ const getUserInfo = async (wallet, proxy = null, jwt) => {
 const verifyTask = async (wallet, proxy, jwt, txHash) => {
   try {
     logger.step(`Verifying task ID 103 for transaction: ${txHash}`);
-    // Hapus '0x' dari txHash jika ada
     const cleanTxHash = txHash.startsWith('0x') ? txHash.substring(2) : txHash;
     const verifyUrl = `https://api.pharosnetwork.xyz/task/verify?address=${wallet.address}&task_id=103&tx_hash=${cleanTxHash}`;
     
@@ -366,10 +389,6 @@ const getMulticallData = (pair, amount, walletAddress) => {
         0, // sqrtPriceLimitX96
       ]
     );
-
-    // The function selector for `exactInputSingle` in Uniswap V3 Router
-    // This assumes your contractAddress is a router that implements exactInputSingle
-    // The prefix '0x04e45aaf' is the function selector for exactInputSingle(tuple)
     return [ethers.concat(['0x04e45aaf', data])];
   } catch (error) {
     logger.error(`Failed to generate multicall data: ${error.message}`);
@@ -415,23 +434,32 @@ const performSwap = async (wallet, provider, index, jwt, proxy) => {
     const deadline = Math.floor(Date.now() / 1000) + 300;
     
     const gasOptions = await getGasOptions(provider);
+    const nonce = await getWalletNonce(wallet); // Dapatkan nonce
 
     let estimatedGas;
     try {
       estimatedGas = await contract.multicall.estimateGas(deadline, multicallData, {
         from: wallet.address,
+        nonce: nonce, // Gunakan nonce yang didapat
         ...gasOptions,
       });
     } catch (error) {
       logger.error(`Gas estimation failed for swap ${index + 1}: ${error.message}`);
+      // Jika estimasi gas gagal karena nonce, coba perbarui nonce dari jaringan
+      if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
+          logger.warn('Nonce issue detected during gas estimation for swap, refreshing nonce...');
+          walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
+      }
       return;
     }
 
     const tx = await contract.multicall(deadline, multicallData, {
       gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
+      nonce: nonce, // Gunakan nonce yang didapat
       ...gasOptions,
     });
 
+    incrementWalletNonce(wallet.address); // Increment nonce setelah transaksi dikirim
     logger.loading(`Swap transaction ${index + 1} sent, waiting for confirmation...`);
     const receipt = await waitForTransactionWithRetry(provider, tx.hash);
     logger.success(`Swap ${index + 1} completed: ${receipt.hash}`);
@@ -445,6 +473,11 @@ const performSwap = async (wallet, provider, index, jwt, proxy) => {
     }
     if (error.receipt) {
       logger.error(`Receipt: ${JSON.stringify(error.receipt, null, 2)}`);
+    }
+     // Jika ada error, coba perbarui nonce dari jaringan
+    if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
+        logger.warn('Nonce issue detected after swap failure, refreshing nonce...');
+        walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
     }
   }
 };
@@ -465,14 +498,17 @@ const transferPHRS = async (wallet, provider, index, jwt, proxy) => {
     }
     
     const gasOptions = await getGasOptions(provider);
+    const nonce = await getWalletNonce(wallet); // Dapatkan nonce
 
     const tx = await wallet.sendTransaction({
       to: toAddress,
       value: required,
       gasLimit: 21000,
+      nonce: nonce, // Gunakan nonce yang didapat
       ...gasOptions,
     });
 
+    incrementWalletNonce(wallet.address); // Increment nonce setelah transaksi dikirim
     logger.loading(`Transfer transaction ${index + 1} sent, waiting for confirmation...`);
     const receipt = await waitForTransactionWithRetry(provider, tx.hash);
     logger.success(`Transfer ${index + 1} completed: ${receipt.hash}`);
@@ -486,6 +522,11 @@ const transferPHRS = async (wallet, provider, index, jwt, proxy) => {
     }
     if (error.receipt) {
       logger.error(`Receipt: ${JSON.stringify(error.receipt, null, 2)}`);
+    }
+    // Jika ada error, coba perbarui nonce dari jaringan
+    if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
+        logger.warn('Nonce issue detected after transfer failure, refreshing nonce...');
+        walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
     }
   }
 };
@@ -507,21 +548,29 @@ const wrapPHRS = async (wallet, provider, index, jwt, proxy) => {
     const wphrsContract = new ethers.Contract(tokens.WPHRS, erc20Abi, wallet);
     
     const gasOptions = await getGasOptions(provider);
+    const nonce = await getWalletNonce(wallet); // Dapatkan nonce
 
     let estimatedGas;
     try {
       estimatedGas = await wphrsContract.deposit.estimateGas({ value: amountWei, ...gasOptions });
     } catch (error) {
       logger.error(`Gas estimation failed for wrap ${index + 1}: ${error.message}`);
+      // Jika estimasi gas gagal karena nonce, coba perbarui nonce dari jaringan
+      if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
+          logger.warn('Nonce issue detected during gas estimation for wrap, refreshing nonce...');
+          walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
+      }
       return;
     }
 
     const tx = await wphrsContract.deposit({
       value: amountWei,
       gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
+      nonce: nonce, // Gunakan nonce yang didapat
       ...gasOptions,
     });
 
+    incrementWalletNonce(wallet.address); // Increment nonce setelah transaksi dikirim
     logger.loading(`Wrap transaction ${index + 1} sent, waiting for confirmation...`);
     const receipt = await waitForTransactionWithRetry(provider, tx.hash);
     logger.success(`Wrap ${index + 1} completed: ${receipt.hash}`);
@@ -535,6 +584,11 @@ const wrapPHRS = async (wallet, provider, index, jwt, proxy) => {
     }
     if (error.receipt) {
       logger.error(`Receipt: ${JSON.stringify(error.receipt, null, 2)}`);
+    }
+    // Jika ada error, coba perbarui nonce dari jaringan
+    if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
+        logger.warn('Nonce issue detected after wrap failure, refreshing nonce...');
+        walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
     }
   }
 };
@@ -746,20 +800,28 @@ const addLiquidity = async (wallet, provider, index, jwt, proxy) => {
     };
     
     const gasOptions = await getGasOptions(provider);
+    const nonce = await getWalletNonce(wallet); // Dapatkan nonce
 
     let estimatedGas;
     try {
       estimatedGas = await positionManager.mint.estimateGas(mintParams, { from: wallet.address, ...gasOptions });
     } catch (error) {
       logger.error(`Gas estimation failed for LP ${index + 1}: ${error.message}`);
+      // Jika estimasi gas gagal karena nonce, coba perbarui nonce dari jaringan
+      if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
+          logger.warn('Nonce issue detected during gas estimation for LP, refreshing nonce...');
+          walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
+      }
       return;
     }
 
     const tx = await positionManager.mint(mintParams, {
       gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
+      nonce: nonce, // Gunakan nonce yang didapat
       ...gasOptions,
     });
 
+    incrementWalletNonce(wallet.address); // Increment nonce setelah transaksi dikirim
     logger.loading(`Liquidity Add ${index + 1} sent, waiting for confirmation...`);
     const receipt = await waitForTransactionWithRetry(provider, tx.hash);
     logger.success(`Liquidity Add ${index + 1} completed: ${receipt.hash}`);
@@ -773,6 +835,11 @@ const addLiquidity = async (wallet, provider, index, jwt, proxy) => {
     }
     if (error.receipt) {
       logger.error(`Receipt: ${JSON.stringify(error.receipt, null, 2)}`);
+    }
+    // Jika ada error, coba perbarui nonce dari jaringan
+    if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
+        logger.warn('Nonce issue detected after LP failure, refreshing nonce...');
+        walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
     }
   }
 };
@@ -827,7 +894,10 @@ const main = async () => {
       const provider = setupProvider(proxy);
       const wallet = new ethers.Wallet(privateKey, provider);
 
-      logger.wallet(`Using wallet: ${wallet.address}`);
+      // Inisialisasi nonce untuk wallet ini saat pertama kali digunakan dalam siklus
+      walletNonces[wallet.address] = await provider.getTransactionCount(wallet.address, 'latest');
+      logger.wallet(`Using wallet: ${wallet.address} (Initial Nonce: ${walletNonces[wallet.address]})`);
+
 
       await claimFaucet(wallet, proxy);
 
@@ -843,7 +913,8 @@ const main = async () => {
       console.log(`${colors.cyan}------------------------${colors.reset}`);
       for (let i = 0; i < numTransfers; i++) {
         await transferPHRS(wallet, provider, i, jwt, proxy);
-        await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 1000));
+        // Tambahkan delay kecil antar transaksi untuk memberi waktu node memperbarui nonce
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 3000 + 2000)); // Delay 2-5 detik
       }
 
       console.log(`\n${colors.cyan}------------------------${colors.reset}`);
@@ -851,7 +922,7 @@ const main = async () => {
       console.log(`${colors.cyan}------------------------${colors.reset}`);
       for (let i = 0; i < numWraps; i++) {
         await wrapPHRS(wallet, provider, i, jwt, proxy);
-        await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 1000));
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 3000 + 2000)); // Delay 2-5 detik
       }
 
       console.log(`\n${colors.cyan}------------------------${colors.reset}`);
@@ -859,7 +930,7 @@ const main = async () => {
       console.log(`${colors.cyan}------------------------${colors.reset}`);
       for (let i = 0; i < numSwaps; i++) {
         await performSwap(wallet, provider, i, jwt, proxy);
-        await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 1000));
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 3000 + 2000)); // Delay 2-5 detik
       }
 
       console.log(`\n${colors.cyan}------------------------${colors.reset}`);
@@ -867,7 +938,7 @@ const main = async () => {
       console.log(`${colors.cyan}------------------------${colors.reset}`);
       for (let i = 0; i < numLPs; i++) {
         await addLiquidity(wallet, provider, i, jwt, proxy);
-        await new Promise(resolve => setTimeout(resolve, Math.random() * 2000 + 1000));
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 3000 + 2000)); // Delay 2-5 detik
       }
     }
 
