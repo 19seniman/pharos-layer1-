@@ -14,28 +14,32 @@ const colors = {
   red: '\x1b[31m',
   white: '\x1b[37m',
   bold: '\x1b[1m',
+  blue: '\x1b[34m', // Menambahkan warna biru
+  magenta: '\x1b[35m', // Menambahkan warna magenta
+  gold: '\x1b[33;1m', // Menambahkan warna gold (kuning tebal)
 };
 
 const fancyBox = (title, subtitle) => {
-  console.log(`${loggerTheme.cyan}${loggerTheme.bold}`);
+  console.log(`${colors.cyan}${colors.bold}`); // Menggunakan 'colors'
   console.log('╔══════════════════════════════════════════════╗');
   console.log(`║  ${title.padEnd(42)}  ║`);
   if (subtitle) {
     console.log(`║  ${subtitle.padEnd(42)}  ║`);
   }
   console.log('╚══════════════════════════════════════════════╝');
-  console.log(loggerTheme.reset);
+  console.log(colors.reset); // Menggunakan 'colors'
 };
 
 const logger = {
-  info: (msg) => console.log(`${loggerTheme.blue}[ ℹ INFO ] → ${msg}${loggerTheme.reset}`),
-  warn: (msg) => console.log(`${loggerTheme.yellow}[ ⚠ WARNING ] → ${msg}${loggerTheme.reset}`),
-  error: (msg) => console.log(`${loggerTheme.red}[ ✖ ERROR ] → ${msg}${loggerTheme.reset}`),
-  success: (msg) => console.log(`${loggerTheme.green}[ ✔ DONE ] → ${msg}${loggerTheme.reset}`),
-  loading: (msg) => console.log(`${loggerTheme.cyan}[ ⌛ LOADING ] → ${msg}${loggerTheme.reset}`),
-  step: (msg) => console.log(`${loggerTheme.magenta}[ ➔ STEP ] → ${msg}${loggerTheme.reset}`),
-  wallet: (msg) => console.log(`${loggerTheme.gold}[ 💰 WALLET ] → ${msg}${loggerTheme.reset}`),
-  banner: () => fancyBox(' 🍉🍉 Free Plestine 🍉🍉', '— 19Seniman From Insider 🏴‍☠️ —'),
+  info: (msg) => console.log(`${colors.blue}[ ℹ INFO ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
+  warn: (msg) => console.log(`${colors.yellow}[ ⚠ WARNING ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
+  error: (msg) => console.log(`${colors.red}[ ✖ ERROR ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
+  success: (msg) => console.log(`${colors.green}[ ✔ DONE ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
+  loading: (msg) => console.log(`${colors.cyan}[ ⌛ LOADING ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
+  step: (msg) => console.log(`${colors.magenta}[ ➔ STEP ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
+  wallet: (msg) => console.log(`${colors.gold}[ 💰 WALLET ] → ${msg}${colors.reset}`), // Menggunakan 'colors'
+  user: (msg) => console.log(`\n${colors.white}[➤] ${msg}${colors.reset}`), // Tambahkan logger.user yang hilang
+  banner: () => fancyBox(' 🍉🍉 Free Palestine 🍉🍉', '— 19Seniman From Insider 🏴‍☠️ —'),
 };
 
 const networkConfig = {
