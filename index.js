@@ -227,18 +227,23 @@ const checkBalanceAndApproval = async (wallet, tokenAddress, amount, decimals, s
       return false;
     }
 
-    const allowance = await tokenContract.allowance(wallet.address, spender);
-    if (allowance < required) {
-      logger.step(`Approving ${amount} tokens for ${spender}...`);
-      const estimatedGas = await tokenContract.approve.estimateGas(spender, ethers.MaxUint256);
-      const feeData = await wallet.provider.getFeeData();
-      const gasPrice = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
-      const approveTx = await tokenContract.approve(spender, ethers.MaxUint256, {
-        gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
-        gasPrice,
-        maxFeePerGas: feeData.maxFeePerGas || undefined,
-        maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
-      });
+   const allowance = await tokenContract.allowance(wallet.address, spender);
+
+if (allowance < required) {
+  logger.step(`Approving ${amount} tokens for ${spender}...`);
+
+  const estimatedGas = await tokenContract.approve.estimateGas(spender, ethers.MaxUint256);
+  const feeData = await wallet.provider.getFeeData();
+
+  const approveTx = await tokenContract.approve(spender, ethers.MaxUint256, {
+    gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
+    maxFeePerGas: feeData.maxFeePerGas || ethers.parseUnits('2', 'gwei'),
+    maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || ethers.parseUnits('1', 'gwei'),
+  });
+
+  logger.success(`Approve tx sent: ${approveTx.hash}`);
+}
+
       const receipt = await waitForTransactionWithRetry(wallet.provider, approveTx.hash);
       logger.success('Approval completed');
     }
