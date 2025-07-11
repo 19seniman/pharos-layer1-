@@ -16,43 +16,24 @@ const colors = {
   bold: '\x1b[1m',
 };
 
-const loggerTheme = {
-  reset: "\x1b[0m",
-  bold: "\x1b[1m",
-  italic: "\x1b[3m",
-  underline: "\x1b[4m",
-  red: "\x1b[31m",
-  green: "\x1b[32m",
-  yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  magenta: "\x1b[35m",
-  cyan: "\x1b[36m",
-  white: "\x1b[37m",
-  bgGray: "\x1b[100m",
-  gold: "\x1b[33m", // Gunakan kuning sebagai warna emas
-};
-
-const fancyBox = (title, subtitle) => {
-  console.log(`${loggerTheme.cyan}${loggerTheme.bold}`);
-  console.log('╔══════════════════════════════════════════════╗');
-  console.log(`║  ${title.padEnd(42)}  ║`);
-  if (subtitle) {
-    console.log(`║  ${subtitle.padEnd(42)}  ║`);
-  }
-  console.log('╚══════════════════════════════════════════════╝');
-  console.log(loggerTheme.reset);
-};
-
 const logger = {
-  info: (msg) => console.log(`${loggerTheme.blue}[ ℹ INFO ] → ${msg}${loggerTheme.reset}`),
-  warn: (msg) => console.log(`${loggerTheme.yellow}[ ⚠ WARNING ] → ${msg}${loggerTheme.reset}`),
-  error: (msg) => console.log(`${loggerTheme.red}[ ✖ ERROR ] → ${msg}${loggerTheme.reset}`),
-  success: (msg) => console.log(`${loggerTheme.green}[ ✔ DONE ] → ${msg}${loggerTheme.reset}`),
-  loading: (msg) => console.log(`${loggerTheme.cyan}[ ⌛ LOADING ] → ${msg}${loggerTheme.reset}`),
-  step: (msg) => console.log(`${loggerTheme.magenta}[ ➔ STEP ] → ${msg}${loggerTheme.reset}`),
-  wallet: (msg) => console.log(`${loggerTheme.gold}[ 💰 WALLET ] → ${msg}${loggerTheme.reset}`),
-  banner: () => fancyBox(' 🍉🍉 Free Plestine 🍉🍉', '— 19Seniman From Insider 🏴‍☠️ —'),
+  info: (msg) => console.log(`${colors.green}[✓] ${msg}${colors.reset}`),
+  wallet: (msg) => console.log(`${colors.yellow}[➤] ${msg}${colors.reset}`),
+  warn: (msg) => console.log(`${colors.yellow}[!] ${msg}${colors.reset}`),
+  error: (msg) => console.log(`${colors.red}[✗] ${msg}${colors.reset}`),
+  success: (msg) => console.log(`${colors.green}[+] ${msg}${colors.reset}`),
+  loading: (msg) => console.log(`${colors.cyan}[⟳] ${msg}${colors.reset}`),
+  step: (msg) => console.log(`${colors.white}[➤] ${msg}${colors.reset}`),
+  user: (msg) => console.log(`\n${colors.white}[➤] ${msg}${colors.reset}`),
+  banner: () => {
+    console.log(`${colors.cyan}${colors.bold}`);
+    console.log('-------------------------------------------------');
+    console.log(' Pharos Testnet Auto Bot - Airdrop Insiders');
+    console.log('-------------------------------------------------');
+    console.log(`${colors.reset}\n`);
+  },
 };
+
 const networkConfig = {
   name: 'Pharos Testnet',
   chainId: 688688,
@@ -212,6 +193,23 @@ const waitForTransactionWithRetry = async (provider, txHash, maxRetries = 5, bas
   throw new Error(`Failed to get transaction receipt for ${txHash} after ${maxRetries} retries`);
 };
 
+const getGasOptions = async (provider) => {
+  const feeData = await provider.getFeeData();
+  const gasOptions = {};
+
+  // Prefer EIP-1559 (type 2) if maxFeePerGas and maxPriorityFeePerGas are available
+  if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
+    gasOptions.maxFeePerGas = feeData.maxFeePerGas;
+    gasOptions.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
+  } else if (feeData.gasPrice) { // Fallback to legacy (type 0) if only gasPrice is available
+    gasOptions.gasPrice = feeData.gasPrice;
+  } else {
+    // Default to a sensible gasPrice if no fee data is available
+    gasOptions.gasPrice = ethers.parseUnits('1', 'gwei');
+  }
+  return gasOptions;
+};
+
 const checkBalanceAndApproval = async (wallet, tokenAddress, amount, decimals, spender) => {
   try {
     const tokenContract = new ethers.Contract(tokenAddress, erc20Abi, wallet);
@@ -227,23 +225,18 @@ const checkBalanceAndApproval = async (wallet, tokenAddress, amount, decimals, s
       return false;
     }
 
-   const allowance = await tokenContract.allowance(wallet.address, spender);
-
-if (allowance < required) {
-  logger.step(`Approving ${amount} tokens for ${spender}...`);
-
-  const estimatedGas = await tokenContract.approve.estimateGas(spender, ethers.MaxUint256);
-  const feeData = await wallet.provider.getFeeData();
-
-  const approveTx = await tokenContract.approve(spender, ethers.MaxUint256, {
-    gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
-    maxFeePerGas: feeData.maxFeePerGas || ethers.parseUnits('2', 'gwei'),
-    maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || ethers.parseUnits('1', 'gwei'),
-  });
-
-  logger.success(`Approve tx sent: ${approveTx.hash}`);
-}
-
+    const allowance = await tokenContract.allowance(wallet.address, spender);
+    if (allowance < required) {
+      logger.step(`Approving ${amount} tokens for ${spender}...`);
+      
+      const gasOptions = await getGasOptions(wallet.provider);
+      
+      const estimatedGas = await tokenContract.approve.estimateGas(spender, ethers.MaxUint256);
+      
+      const approveTx = await tokenContract.approve(spender, ethers.MaxUint256, {
+        gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
+        ...gasOptions, // Spread the gas options here
+      });
       const receipt = await waitForTransactionWithRetry(wallet.provider, approveTx.hash);
       logger.success('Approval completed');
     }
@@ -356,14 +349,17 @@ const getMulticallData = (pair, amount, walletAddress) => {
       [
         tokens[pair.from],
         tokens[pair.to],
-        500,
+        500, // This is likely the pool fee. You might want to make this configurable or retrieve it.
         walletAddress,
         scaledAmount,
-        0,
-        0,
+        0, // amountOutMin
+        0, // sqrtPriceLimitX96
       ]
     );
 
+    // The function selector for `exactInputSingle` in Uniswap V3 Router
+    // This assumes your contractAddress is a router that implements exactInputSingle
+    // The prefix '0x04e45aaf' is the function selector for exactInputSingle(tuple)
     return [ethers.concat(['0x04e45aaf', data])];
   } catch (error) {
     logger.error(`Failed to generate multicall data: ${error.message}`);
@@ -407,25 +403,24 @@ const performSwap = async (wallet, provider, index, jwt, proxy) => {
     }
 
     const deadline = Math.floor(Date.now() / 1000) + 300;
+    
+    const gasOptions = await getGasOptions(provider);
+
     let estimatedGas;
     try {
       estimatedGas = await contract.multicall.estimateGas(deadline, multicallData, {
         from: wallet.address,
+        ...gasOptions, // Include gas options for estimation
       });
     } catch (error) {
       logger.error(`Gas estimation failed for swap ${index + 1}: ${error.message}`);
       return;
     }
 
-   const feeData = await provider.getFeeData();
-
-const tx = await wallet.sendTransaction({
-  to: toAddress,
-  value: required,
-  gasLimit: 21000,
-  maxFeePerGas: feeData.maxFeePerGas || ethers.parseUnits('2', 'gwei'),
-  maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || ethers.parseUnits('1', 'gwei'),
-});
+    const tx = await contract.multicall(deadline, multicallData, {
+      gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
+      ...gasOptions, // Spread the gas options here
+    });
 
     logger.loading(`Swap transaction ${index + 1} sent, waiting for confirmation...`);
     const receipt = await waitForTransactionWithRetry(provider, tx.hash);
@@ -458,16 +453,14 @@ const transferPHRS = async (wallet, provider, index, jwt, proxy) => {
       logger.warn(`Skipping transfer ${index + 1}: Insufficient PHRS balance: ${ethers.formatEther(balance)} < ${amount}`);
       return;
     }
+    
+    const gasOptions = await getGasOptions(provider);
 
-    const feeData = await provider.getFeeData();
-    const gasPrice = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
-     const tx = await wallet.sendTransaction({
+    const tx = await wallet.sendTransaction({
       to: toAddress,
       value: required,
       gasLimit: 21000,
-      gasPrice,
-      maxFeePerGas: feeData.maxFeePerGas || undefined,
-      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
+      ...gasOptions, // Spread the gas options here
     });
 
     logger.loading(`Transfer transaction ${index + 1} sent, waiting for confirmation...`);
@@ -502,22 +495,21 @@ const wrapPHRS = async (wallet, provider, index, jwt, proxy) => {
     }
 
     const wphrsContract = new ethers.Contract(tokens.WPHRS, erc20Abi, wallet);
+    
+    const gasOptions = await getGasOptions(provider);
+
     let estimatedGas;
     try {
-      estimatedGas = await wphrsContract.deposit.estimateGas({ value: amountWei });
+      estimatedGas = await wphrsContract.deposit.estimateGas({ value: amountWei, ...gasOptions });
     } catch (error) {
       logger.error(`Gas estimation failed for wrap ${index + 1}: ${error.message}`);
       return;
     }
 
-    const feeData = await provider.getFeeData();
-    const gasPrice = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
     const tx = await wphrsContract.deposit({
       value: amountWei,
       gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
-      gasPrice,
-      maxFeePerGas: feeData.maxFeePerGas || undefined,
-      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
+      ...gasOptions, // Spread the gas options here
     });
 
     logger.loading(`Wrap transaction ${index + 1} sent, waiting for confirmation...`);
@@ -742,23 +734,20 @@ const addLiquidity = async (wallet, provider, index, jwt, proxy) => {
       recipient: wallet.address,
       deadline,
     };
+    
+    const gasOptions = await getGasOptions(provider);
 
     let estimatedGas;
     try {
-      estimatedGas = await positionManager.mint.estimateGas(mintParams, { from: wallet.address });
+      estimatedGas = await positionManager.mint.estimateGas(mintParams, { from: wallet.address, ...gasOptions });
     } catch (error) {
       logger.error(`Gas estimation failed for LP ${index + 1}: ${error.message}`);
       return;
     }
 
-    const feeData = await provider.getFeeData();
-    const gasPrice = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
-
     const tx = await positionManager.mint(mintParams, {
       gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
-      gasPrice,
-      maxFeePerGas: feeData.maxFeePerGas || undefined,
-      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
+      ...gasOptions, // Spread the gas options here
     });
 
     logger.loading(`Liquidity Add ${index + 1} sent, waiting for confirmation...`);
