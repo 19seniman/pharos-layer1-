@@ -456,13 +456,13 @@ const transferPHRS = async (wallet, provider, index, jwt, proxy) => {
     const feeData = await provider.getFeeData();
     const gasPrice = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
     const tx = await wallet.sendTransaction({
-      to: toAddress,
-      value: required,
-      gasLimit: 21000,
-      gasPrice,
-      maxFeePerGas: feeData.maxFeePerGas || undefined,
-      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
-    });
+  to: toAddress,
+  value: required,
+  gasLimit: 21000,
+  maxFeePerGas: feeData.maxFeePerGas || ethers.utils.parseUnits("2", "gwei"),
+  maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || ethers.utils.parseUnits("1", "gwei"),
+});
+
 
     logger.loading(`Transfer transaction ${index + 1} sent, waiting for confirmation...`);
     const receipt = await waitForTransactionWithRetry(provider, tx.hash);
