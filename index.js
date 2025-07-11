@@ -416,7 +416,6 @@ const performSwap = async (wallet, provider, index, jwt, proxy) => {
     const gasPrice = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
     const tx = await contract.multicall(deadline, multicallData, {
       gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
-      gasPrice,
       maxFeePerGas: feeData.maxFeePerGas || undefined,
       maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
     });
