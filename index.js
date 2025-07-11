@@ -414,8 +414,11 @@ const performSwap = async (wallet, provider, index, jwt, proxy) => {
 
     const feeData = await provider.getFeeData();
     const gasPrice = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
-    const tx = await contract.multicall(deadline, multicallData, {
-      gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
+     const tx = await wallet.sendTransaction({
+      to: toAddress,
+      value: required,
+      gasLimit: 21000,
+      gasPrice,
       maxFeePerGas: feeData.maxFeePerGas || undefined,
       maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
     });
@@ -454,8 +457,11 @@ const transferPHRS = async (wallet, provider, index, jwt, proxy) => {
 
     const feeData = await provider.getFeeData();
     const gasPrice = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
-    const tx = await contract.multicall(deadline, multicallData, {
-      gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
+     const tx = await wallet.sendTransaction({
+      to: toAddress,
+      value: required,
+      gasLimit: 21000,
+      gasPrice,
       maxFeePerGas: feeData.maxFeePerGas || undefined,
       maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
     });
