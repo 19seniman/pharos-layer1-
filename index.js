@@ -17,21 +17,30 @@ const colors = {
   bold: "\x1b[1m"
 };
 
-const logger = {
-  info: (msg) => console.log(`${colors.green}[✓] ${msg}${colors.reset}`),
-  warn: (msg) => console.log(`${colors.yellow}[⚠] ${msg}${colors.reset}`),
-  error: (msg) => console.log(`${colors.red}[✗] ${msg}${colors.reset}`),
-  success: (msg) => console.log(`${colors.green}[✅] ${msg}${colors.reset}`),
-  loading: (msg) => console.log(`${colors.cyan}[⟳] ${msg}${colors.reset}`),
-  step: (msg) => console.log(`${colors.white}[➤] ${msg}${colors.reset}`),
-  userInfo: (msg) => console.log(`${colors.white}[✓] ${msg}${colors.reset}`),
-  banner: () => {
-    console.log(`${colors.cyan}${colors.bold}`);
-    console.log(`---------------------------------------------`);
-    console.log(` 🍉🍉 19Seniman From Insider 🍉🍉 `);
-    console.log(`---------------------------------------------${colors.reset}`);
-    console.log();
+const loggerTheme = {
+  reset: "\x1b[0m",
+  bold: "\x1b[1m",
+  italic: "\x1b[3m",
+  underline: "\x1b[4m",
+  red: "\x1b[31m",
+  green: "\x1b[32m",
+  yellow: "\x1b[33m",
+  blue: "\x1b[34m",
+  magenta: "\x1b[35m",
+  cyan: "\x1b[36m",
+  white: "\x1b[37m",
+  bgGray: "\x1b[100m",
+};
+
+const fancyBox = (title, subtitle) => {
+  console.log(`${loggerTheme.cyan}${loggerTheme.bold}`);
+  console.log('╔══════════════════════════════════════════════╗');
+  console.log(`║  ${title.padEnd(42)}  ║`);
+  if (subtitle) {
+    console.log(`║  ${subtitle.padEnd(42)}  ║`);
   }
+  console.log('╚══════════════════════════════════════════════╝');
+  console.log(loggerTheme.reset);
 };
 
 const NETWORK_CONFIG = {
