@@ -412,16 +412,15 @@ const performSwap = async (wallet, provider, index, jwt, proxy) => {
       return;
     }
 
-    const feeData = await provider.getFeeData();
-    const gasPrice = feeData.gasPrice || ethers.parseUnits('1', 'gwei');
-     const tx = await wallet.sendTransaction({
-      to: toAddress,
-      value: required,
-      gasLimit: 21000,
-      gasPrice,
-      maxFeePerGas: feeData.maxFeePerGas || undefined,
-      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || undefined,
-    });
+   const feeData = await provider.getFeeData();
+
+const tx = await wallet.sendTransaction({
+  to: toAddress,
+  value: required,
+  gasLimit: 21000,
+  maxFeePerGas: feeData.maxFeePerGas || ethers.parseUnits('2', 'gwei'),
+  maxPriorityFeePerGas: feeData.maxPriorityFeePerGas || ethers.parseUnits('1', 'gwei'),
+});
 
     logger.loading(`Swap transaction ${index + 1} sent, waiting for confirmation...`);
     const receipt = await waitForTransactionWithRetry(provider, tx.hash);
