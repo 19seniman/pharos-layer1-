@@ -883,10 +883,10 @@ const main = async () => {
     return;
   }
 
-  const numTransfers = 110;
-  const numWraps = 110;
-  const numSwaps = 110;
-  const numLPs = 110;
+  const numTransfers = 5;
+  const numWraps = 4;
+  const numSwaps = 3;
+  const numLPs = 2;
 
   while (true) {
     for (const privateKey of privateKeys) {
@@ -951,3 +951,4 @@ main().catch(error => {
   logger.error(`Bot failed: ${error.message}`);
   process.exit(1);
 });
+
