@@ -66,11 +66,9 @@ const FAROSWAP_LIQUIDITY_ROUTER_ADDRESS = '0xb93Cd1E38809607a00FF9CaB633db5CAA61
 const LIQUIDITY_TOKEN_A_OBJ = { symbol: 'WPHRS', address: '0x838800b758277CC111B2d48Ab01e5E164f8E9471', decimals: 18 };
 const LIQUIDITY_TOKEN_B_OBJ = { symbol: 'USDT', address: '0xE7E84B8B4f39C507499c40B4ac199B050e2882d5', decimals: 6 };
 
-// Fixed amounts for Liquidity Task
-const LIQUIDITY_AMOUNT_A_WEI = '0x640b5eece000';
-const LIQUIDITY_AMOUNT_B_WEI = '0xd7c8';
-const LIQUIDITY_AMOUNT_A_MIN_WEI = '0x638b505ee400';
-const LIQUIDITY_AMOUNT_B_MIN_WEI = '0xd6b3';
+// Amounts for Liquidity Task (Safe Low Amounts)
+const LIQUIDITY_AMOUNT_A_WEI = 110000000000000n; // ~0.00011 WPHRS
+const LIQUIDITY_AMOUNT_B_WEI = 55000n;           // ~0.055 USDT
 const LIQUIDITY_FEE_UINT = 30n;
 
 const FAROSWAP_LIQUIDITY_ROUTER_ABI = [
@@ -91,7 +89,8 @@ const ERC20_ABI = [
     "function approve(address spender, uint256 amount) returns (bool)",
     "function allowance(address owner, address spender) view returns (uint256)",
     "function decimals() view returns (uint8)",
-    "function balanceOf(address account) view returns (uint256)" 
+    "function balanceOf(address account) view returns (uint256)",
+    "function deposit() payable" 
 ];
 const CASHPLUS_ABI = [
     "function subscribe(address uAddress, uint256 uAmount)",
@@ -263,7 +262,6 @@ async function runPharosSend(accounts, proxies, rl, provider, autoInput = null) 
             logger.info(`[AUTO] Using Random/Generated Wallets.`);
         }
     } else {
-        // Mode Manual Menu 1
         amount = await askQuestion(`${colors.yellow}[?] Enter PHRS amount (e.g., 0.001): ${colors.reset}`, rl);
         numTx = parseInt(await askQuestion(`${colors.yellow}[?] Txs per account: ${colors.reset}`, rl), 10);
         
@@ -292,7 +290,6 @@ async function runPharosSend(accounts, proxies, rl, provider, autoInput = null) 
             logger.loading(`Tx ${i + 1}/${numTx}`);
             let toAddress = targetAddress;
 
-            // Jika tidak ada targetAddress (Mode Random)
             if (!toAddress) {
                 if (randomWallets.length === 0) {
                     const nw = ethers.Wallet.createRandom();
@@ -300,8 +297,6 @@ async function runPharosSend(accounts, proxies, rl, provider, autoInput = null) 
                     randomWallets.push(nw);
                 }
                 toAddress = randomWallets[Math.floor(Math.random() * randomWallets.length)].address;
-
-                // Prevent self-send di mode random
                 if(toAddress.toLowerCase() === wallet.address.toLowerCase()) {
                      const nw = ethers.Wallet.createRandom();
                      saveRandomWallet(nw);
@@ -320,7 +315,7 @@ async function runPharosSend(accounts, proxies, rl, provider, autoInput = null) 
     }
 }
 
-// --- 2. Asseto (Fixed Logic) ---
+// --- 2. Asseto ---
 async function getAssetoJwt(wallet, axiosInstance) {
     try {
         const nr = await axiosInstance.get(`${ASSETO_API_BASE}/nonce?address=${wallet.address}`);
@@ -357,34 +352,28 @@ async function runAssetoTask(accounts, proxies, rl, provider, autoInput = null) 
         const proxyAgent = getProxyAgent(proxies);
         const axiosInstance = createAxiosInstance(proxyAgent);
         
-        // Login Asseto
         const jwt = await getAssetoJwt(wallet, axiosInstance);
         if (!jwt) {
-            logger.error('Asseto Login Failed. Skipping account.');
+            logger.error('Asseto Login Failed. Skipping.');
             continue;
         }
         axiosInstance.defaults.headers.common['Authorization'] = jwt;
 
         const usdt = new ethers.Contract(USDT_ADDRESS_CONST, ERC20_ABI, wallet);
-        // Include ERC20 ABI in CashPlus to use balanceOf
         const cashPlus = new ethers.Contract(CASHPLUS_ADDRESS, [...CASHPLUS_ABI, ...ERC20_ABI], wallet);
 
         for (let i = 0; i < numTx; i++) {
             logger.loading(`Cycle ${i + 1}/${numTx}`);
 
-            // --- 1. SUBSCRIBE ---
             if (choice === '1' || choice === 'AUTO') {
                 try {
                     const amtWei = ethers.parseUnits(amount, usdtDecimals);
-                    
-                    // Balance Check
                     const usdtBal = await usdt.balanceOf(wallet.address);
                     if (usdtBal < amtWei) {
                          logger.error(`Insufficient USDT. Have: ${ethers.formatUnits(usdtBal,6)}`);
                     } else {
                         if(await approveToken(wallet, usdt, CASHPLUS_ADDRESS, amtWei)) {
                             logger.loading(`Subscribing ${amount} USDT...`);
-                            // Gas Limit Manual to prevent estimation error
                             const tx = await cashPlus.subscribe(USDT_ADDRESS_CONST, amtWei, { gasLimit: 500000 });
                             await tx.wait();
                             logger.success(`Subscribed successfully.`);
@@ -393,19 +382,14 @@ async function runAssetoTask(accounts, proxies, rl, provider, autoInput = null) 
                 } catch(e) { logger.error(`Subscribe failed: ${e.message}`); }
             }
 
-            if (choice === 'AUTO') {
-                logger.loading('Waiting 8 seconds for balance update...');
-                await delay(8000); 
-            }
+            if (choice === 'AUTO') await delay(8000); 
 
-            // --- 2. REDEEM ---
             if (choice === '2' || choice === 'AUTO') {
                 try {
                     const currentCashPlusBalance = await cashPlus.balanceOf(wallet.address);
                     const requestedAmountWei = ethers.parseUnits(amount, cashPlusDecimals);
                     let redeemAmountWei = requestedAmountWei;
 
-                    // Adjust if balance < request
                     if (currentCashPlusBalance < requestedAmountWei) {
                         if (currentCashPlusBalance === 0n) {
                             logger.warn('CASH+ Balance is 0. Skipping Redeem.');
@@ -428,7 +412,7 @@ async function runAssetoTask(accounts, proxies, rl, provider, autoInput = null) 
     }
 }
 
-// --- 3. FaroSwap ---
+// --- 3. FaroSwap Swap ---
 
 async function getDodoRoute(axiosInstance, { fromToken, toToken, fromAmountWei, userAddress }) {
     try {
@@ -497,6 +481,7 @@ async function runFaroswapSwapTask(accounts, proxies, rl, provider, autoInput = 
     }
 }
 
+// --- 4. FaroSwap Add Liquidity ---
 async function runFaroswapAddLiquidityTask(accounts, proxies, rl, provider, autoInput = null) {
     logger.step('Starting FaroSwap Liquidity Task...');
     
@@ -512,20 +497,51 @@ async function runFaroswapAddLiquidityTask(accounts, proxies, rl, provider, auto
         logger.wallet(`Account ${account.index}`);
         const wallet = new ethers.Wallet(account.pk, provider);
         const router = new ethers.Contract(FAROSWAP_LIQUIDITY_ROUTER_ADDRESS, FAROSWAP_LIQUIDITY_ROUTER_ABI, wallet);
-        const tA = new ethers.Contract(LIQUIDITY_TOKEN_A_OBJ.address, ERC20_ABI, wallet);
-        const tB = new ethers.Contract(LIQUIDITY_TOKEN_B_OBJ.address, ERC20_ABI, wallet);
+        
+        // Token Contracts
+        const wphrs = new ethers.Contract(LIQUIDITY_TOKEN_A_OBJ.address, ERC20_ABI, wallet);
+        const usdt = new ethers.Contract(LIQUIDITY_TOKEN_B_OBJ.address, ERC20_ABI, wallet);
 
         for (let i = 0; i < numTx; i++) {
             try {
                 logger.loading(`Liquidity ${i+1}/${numTx}`);
-                if (!await approveToken(wallet, tA, FAROSWAP_LIQUIDITY_ROUTER_ADDRESS, LIQUIDITY_AMOUNT_A_WEI)) continue;
-                if (!await approveToken(wallet, tB, FAROSWAP_LIQUIDITY_ROUTER_ADDRESS, LIQUIDITY_AMOUNT_B_WEI)) continue;
 
+                // 1. Check & Wrap WPHRS if needed
+                const wphrsBal = await wphrs.balanceOf(wallet.address);
+                if (wphrsBal < LIQUIDITY_AMOUNT_A_WEI) {
+                    logger.warn(`WPHRS too low. Wrapping PHRS...`);
+                    try {
+                        const wrapTx = await wphrs.deposit({ value: LIQUIDITY_AMOUNT_A_WEI });
+                        await wrapTx.wait();
+                        logger.success(`Wrapped PHRS to WPHRS.`);
+                    } catch (wrapErr) {
+                        logger.error(`Wrap failed: ${wrapErr.message}. Skipping liquidity.`);
+                        continue;
+                    }
+                }
+
+                // 2. Check USDT
+                const usdtBal = await usdt.balanceOf(wallet.address);
+                if (usdtBal < LIQUIDITY_AMOUNT_B_WEI) {
+                    logger.error(`Insufficient USDT for liquidity. Have: ${usdtBal}, Need: ${LIQUIDITY_AMOUNT_B_WEI}. Skipping.`);
+                    continue;
+                }
+
+                // 3. Approve
+                if (!await approveToken(wallet, wphrs, FAROSWAP_LIQUIDITY_ROUTER_ADDRESS, LIQUIDITY_AMOUNT_A_WEI)) continue;
+                if (!await approveToken(wallet, usdt, FAROSWAP_LIQUIDITY_ROUTER_ADDRESS, LIQUIDITY_AMOUNT_B_WEI)) continue;
+
+                // 4. Add Liquidity
                 const tx = await router.addLiquidity(
-                    LIQUIDITY_TOKEN_A_OBJ.address, LIQUIDITY_TOKEN_B_OBJ.address, LIQUIDITY_FEE_UINT,
-                    LIQUIDITY_AMOUNT_A_WEI, LIQUIDITY_AMOUNT_B_WEI,
-                    LIQUIDITY_AMOUNT_A_MIN_WEI, LIQUIDITY_AMOUNT_B_MIN_WEI,
-                    wallet.address, Math.floor(Date.now()/1000) + 900
+                    LIQUIDITY_TOKEN_A_OBJ.address, 
+                    LIQUIDITY_TOKEN_B_OBJ.address, 
+                    LIQUIDITY_FEE_UINT,
+                    LIQUIDITY_AMOUNT_A_WEI, 
+                    LIQUIDITY_AMOUNT_B_WEI,
+                    0n, 0n, 
+                    wallet.address, 
+                    Math.floor(Date.now()/1000) + 900,
+                    { gasLimit: 3000000 } 
                 );
                 await tx.wait();
                 logger.success(`Liquidity Added.`);
@@ -542,7 +558,7 @@ async function runFaroswapMenu(accounts, proxies, rl, provider) {
     if (c === '2') await runFaroswapAddLiquidityTask(accounts, proxies, rl, provider);
 }
 
-// --- 4. Faucet ---
+// --- 5. Faucet ---
 async function claimFaucet(wallet, proxyString) {
     const claimUrl = 'https://api.dodoex.io/gas-faucet-server/faucet/claim';
     const payload = { chainId: CHAIN_ID, address: wallet.address };
@@ -599,42 +615,68 @@ async function runFaucetTask(accounts, proxies, rl, provider) {
     }
 }
 
-// --- MAIN RUN ALL ---
+// --- MAIN RUN ALL (UPDATED: 24h Loop) ---
 
 async function runAllDailyTasks(accounts, proxies, rl, provider) {
     logger.banner();
-    logger.step('🚀 STARTING ALL DAILY TASKS AUTOMATION 🚀');
+    logger.step('🚀 STARTING ALL DAILY TASKS AUTOMATION (24h Loop) 🚀');
     
+    // 1. CONFIGURATION (ONCE)
     const amount = await askQuestion(`${colors.yellow}[?] Enter Token Amount (e.g. 0.001): ${colors.reset}`, rl);
     const numTxStr = await askQuestion(`${colors.yellow}[?] Enter TXs per module (e.g. 3): ${colors.reset}`, rl);
     const numTx = parseInt(numTxStr, 10);
     
-    // NEW: Ask for Target Address specifically for the "Send" task
     const targetAddrInput = await askQuestion(`${colors.yellow}[?] [Optional] Target Address for Send Task (Leave empty for Random): ${colors.reset}`, rl);
     const targetAddress = ethers.isAddress(targetAddrInput.trim()) ? targetAddrInput.trim() : null;
 
     const autoConfig = { amount, numTx, targetAddress };
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
-    // 1. Pharos Send
-    logger.step('>>> [1/4] Running Pharos Send Task...');
-    await runPharosSend(accounts, proxies, rl, provider, autoConfig);
-    await delay(3000);
+    // 2. INFINITE LOOP
+    while (true) {
+        const startTime = new Date();
+        logger.info(`>>> Cycle Started at: ${startTime.toLocaleString()}`);
 
-    // 2. Asseto (Auto Subscribe & Redeem)
-    logger.step('>>> [2/4] Running Asseto Task (Subscribe & Redeem)...');
-    await runAssetoTask(accounts, proxies, rl, provider, autoConfig);
-    await delay(3000);
+        // --- Execute Tasks ---
 
-    // 3. FaroSwap Swap
-    logger.step('>>> [3/4] Running FaroSwap SWAP (PHRS -> USDT)...');
-    await runFaroswapSwapTask(accounts, proxies, rl, provider, autoConfig);
-    await delay(3000);
+        // 1. Login & Check-in Refresh (Important for long loops)
+        logger.step('>>> [0/4] Refreshing Login & Daily Check-in...');
+        for (const acc of accounts) {
+            const w = new ethers.Wallet(acc.pk, provider);
+            const jwt = await pharosLogin(w, createAxiosInstance(getProxyAgent(proxies)));
+            if (jwt) await pharosCheckInAndProfile(w, jwt, createAxiosInstance(getProxyAgent(proxies)));
+        }
 
-    // 4. FaroSwap Liquidity
-    logger.step('>>> [4/4] Running FaroSwap ADD LIQUIDITY...');
-    await runFaroswapAddLiquidityTask(accounts, proxies, rl, provider, autoConfig);
+        // 2. Pharos Send
+        logger.step('>>> [1/4] Running Pharos Send Task...');
+        await runPharosSend(accounts, proxies, rl, provider, autoConfig);
+        await delay(3000);
 
-    logger.success('✅ ALL DAILY TASKS COMPLETED FOR ALL ACCOUNTS.');
+        // 3. Asseto
+        logger.step('>>> [2/4] Running Asseto Task...');
+        await runAssetoTask(accounts, proxies, rl, provider, autoConfig);
+        await delay(3000);
+
+        // 4. Swap
+        logger.step('>>> [3/4] Running FaroSwap SWAP...');
+        await runFaroswapSwapTask(accounts, proxies, rl, provider, autoConfig);
+        await delay(3000);
+
+        // 5. Liquidity
+        logger.step('>>> [4/4] Running FaroSwap ADD LIQUIDITY...');
+        await runFaroswapAddLiquidityTask(accounts, proxies, rl, provider, autoConfig);
+
+        // --- End of Cycle ---
+        const endTime = new Date();
+        const nextRun = new Date(endTime.getTime() + ONE_DAY_MS);
+        
+        logger.success('✅ ALL DAILY TASKS COMPLETED.');
+        logger.info(`Cycle Finished at: ${endTime.toLocaleString()}`);
+        logger.warn(`💤 Sleeping for 24 hours...`);
+        logger.info(`⏰ Next Run Scheduled at: ${nextRun.toLocaleString()}`);
+        
+        await delay(ONE_DAY_MS); // Wait 24 Hours
+    }
 }
 
 // --- Main Menu ---
@@ -657,7 +699,7 @@ async function showMainMenu() {
 
     while (true) {
         console.log(`\n${colors.cyan}--- Main Menu ---${colors.reset}`);
-        console.log(`${colors.gold}0. 🚀 Run ALL Daily Tasks (Send, Asseto, Swap, Liquidity)${colors.reset}`);
+        console.log(`${colors.gold}0. 🚀 Run ALL Daily Tasks (Auto-Loop 24h)${colors.reset}`);
         console.log('1. Pharos Send Task');
         console.log('2. Asseto Task');
         console.log('3. FaroSwap Task');
