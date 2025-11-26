@@ -90,7 +90,8 @@ const TOKENS = {
 const ERC20_ABI = [
     "function approve(address spender, uint256 amount) returns (bool)",
     "function allowance(address owner, address spender) view returns (uint256)",
-    "function decimals() view returns (uint8)"
+    "function decimals() view returns (uint8)",
+    "function balanceOf(address account) view returns (uint256)" 
 ];
 const CASHPLUS_ABI = [
     "function subscribe(address uAddress, uint256 uAmount)",
@@ -236,7 +237,7 @@ async function approveToken(wallet, tokenContract, spenderAddress, amount) {
     }
 }
 
-// --- 1. Pharos Send (UPDATED) ---
+// --- 1. Pharos Send ---
 async function pharosSendVerify(wallet, txHash, axiosInstance, pharosJwt) {
     try {
         axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${pharosJwt}`;
@@ -249,19 +250,18 @@ async function runPharosSend(accounts, proxies, rl, provider, autoInput = null) 
     logger.step('Starting Pharos Send Task...');
 
     let amount, numTx;
-    let targetAddress = null; // Alamat tujuan (jika null = random)
+    let targetAddress = null;
 
     if (autoInput) {
         amount = autoInput.amount;
         numTx = autoInput.numTx;
-        targetAddress = autoInput.targetAddress; // Ambil dari input otomatis jika ada
+        targetAddress = autoInput.targetAddress; 
 
         if (targetAddress) {
             logger.info(`[AUTO] Using Manual Target: ${targetAddress}`);
         } else {
             logger.info(`[AUTO] Using Random/Generated Wallets.`);
         }
-
     } else {
         // Mode Manual Menu 1
         amount = await askQuestion(`${colors.yellow}[?] Enter PHRS amount (e.g., 0.001): ${colors.reset}`, rl);
@@ -320,7 +320,7 @@ async function runPharosSend(accounts, proxies, rl, provider, autoInput = null) 
     }
 }
 
-// --- 2. Asseto ---
+// --- 2. Asseto (Fixed Logic) ---
 async function getAssetoJwt(wallet, axiosInstance) {
     try {
         const nr = await axiosInstance.get(`${ASSETO_API_BASE}/nonce?address=${wallet.address}`);
@@ -356,41 +356,74 @@ async function runAssetoTask(accounts, proxies, rl, provider, autoInput = null) 
         const wallet = new ethers.Wallet(account.pk, provider);
         const proxyAgent = getProxyAgent(proxies);
         const axiosInstance = createAxiosInstance(proxyAgent);
+        
+        // Login Asseto
         const jwt = await getAssetoJwt(wallet, axiosInstance);
-        if (!jwt) continue;
+        if (!jwt) {
+            logger.error('Asseto Login Failed. Skipping account.');
+            continue;
+        }
+        axiosInstance.defaults.headers.common['Authorization'] = jwt;
 
         const usdt = new ethers.Contract(USDT_ADDRESS_CONST, ERC20_ABI, wallet);
+        // Include ERC20 ABI in CashPlus to use balanceOf
         const cashPlus = new ethers.Contract(CASHPLUS_ADDRESS, [...CASHPLUS_ABI, ...ERC20_ABI], wallet);
 
         for (let i = 0; i < numTx; i++) {
             logger.loading(`Cycle ${i + 1}/${numTx}`);
 
+            // --- 1. SUBSCRIBE ---
             if (choice === '1' || choice === 'AUTO') {
                 try {
                     const amtWei = ethers.parseUnits(amount, usdtDecimals);
-                    if(await approveToken(wallet, usdt, CASHPLUS_ADDRESS, amtWei)) {
-                        logger.loading(`Subscribing ${amount} USDT...`);
-                        const tx = await cashPlus.subscribe(USDT_ADDRESS_CONST, amtWei);
-                        await tx.wait();
-                        logger.success(`Subscribed.`);
+                    
+                    // Balance Check
+                    const usdtBal = await usdt.balanceOf(wallet.address);
+                    if (usdtBal < amtWei) {
+                         logger.error(`Insufficient USDT. Have: ${ethers.formatUnits(usdtBal,6)}`);
+                    } else {
+                        if(await approveToken(wallet, usdt, CASHPLUS_ADDRESS, amtWei)) {
+                            logger.loading(`Subscribing ${amount} USDT...`);
+                            // Gas Limit Manual to prevent estimation error
+                            const tx = await cashPlus.subscribe(USDT_ADDRESS_CONST, amtWei, { gasLimit: 500000 });
+                            await tx.wait();
+                            logger.success(`Subscribed successfully.`);
+                        }
                     }
                 } catch(e) { logger.error(`Subscribe failed: ${e.message}`); }
             }
 
-            if (choice === 'AUTO') await delay(5000);
+            if (choice === 'AUTO') {
+                logger.loading('Waiting 8 seconds for balance update...');
+                await delay(8000); 
+            }
 
+            // --- 2. REDEEM ---
             if (choice === '2' || choice === 'AUTO') {
                 try {
-                    const amtWei = ethers.parseUnits(amount, cashPlusDecimals); 
-                    if(await approveToken(wallet, cashPlus, CASHPLUS_ADDRESS, amtWei)) {
-                        logger.loading(`Redeeming ${amount} CASH+...`);
-                        const tx = await cashPlus.redemption(USDT_ADDRESS_CONST, amtWei);
+                    const currentCashPlusBalance = await cashPlus.balanceOf(wallet.address);
+                    const requestedAmountWei = ethers.parseUnits(amount, cashPlusDecimals);
+                    let redeemAmountWei = requestedAmountWei;
+
+                    // Adjust if balance < request
+                    if (currentCashPlusBalance < requestedAmountWei) {
+                        if (currentCashPlusBalance === 0n) {
+                            logger.warn('CASH+ Balance is 0. Skipping Redeem.');
+                            continue;
+                        }
+                        logger.warn(`Adjusting redeem to Max Balance: ${ethers.formatUnits(currentCashPlusBalance, 18)}`);
+                        redeemAmountWei = currentCashPlusBalance;
+                    }
+
+                    if(await approveToken(wallet, cashPlus, CASHPLUS_ADDRESS, redeemAmountWei)) {
+                        logger.loading(`Redeeming ${ethers.formatUnits(redeemAmountWei, 18)} CASH+...`);
+                        const tx = await cashPlus.redemption(USDT_ADDRESS_CONST, redeemAmountWei, { gasLimit: 800000 });
                         await tx.wait();
-                        logger.success(`Redeemed.`);
+                        logger.success(`Redeemed successfully.`);
                     }
                 } catch(e) { logger.error(`Redeem failed: ${e.message}`); }
             }
-            await delay(5000);
+            await delay(3000);
         }
     }
 }
