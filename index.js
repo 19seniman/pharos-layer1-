@@ -1,954 +1,1047 @@
 require('dotenv').config();
+const axios = require('axios');
 const { ethers } = require('ethers');
+const readline = require('readline');
 const fs = require('fs');
 const { HttpsProxyAgent } = require('https-proxy-agent');
-const randomUseragent = require('random-useragent');
-const axios = require('axios');
-const prompt = require('prompt-sync')({ sigint: true });
+const { URL } = require('url');
 
 const colors = {
-  reset: '\x1b[0m',
-  cyan: '\x1b[36m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  red: '\x1b[31m',
-  white: '\x1b[37m',
-  bold: '\x1b[1m',
-  blue: '\x1b[34m',
-  magenta: '\x1b[35m',
-  gold: '\x1b[33;1m',
+    reset: '\x1b[0m',
+    red: '\x1b[31m',
+    green: '\x1b[32m',
+    yellow: '\x1b[33m',
+    blue: '\x1b[34m',
+    magenta: '\x1b[35m',
+    cyan: '\x1b[36m',
+    white: '\x1b[37m',
+    gold: '\x1b[33;1m', 
+    bold: '\x1b[1m'
 };
 
-const fancyBox = (title, subtitle) => {
-  console.log(`${colors.cyan}${colors.bold}`);
-  console.log('╔══════════════════════════════════════════════╗');
-  console.log(`║  ${title.padEnd(42)}  ║`);
-  if (subtitle) {
-    console.log(`║  ${subtitle.padEnd(42)}  ║`);
-  }
-  console.log('╚══════════════════════════════════════════════╝');
-  console.log(colors.reset);
-};
+function fancyBox(text1, text2) {
+    const width = 60;
+    const line = '─'.repeat(width);
+    const pad = (str) => {
+        const len = str.length;
+        const p = Math.floor((width - len) / 2);
+        return ' '.repeat(p) + str + ' '.repeat(width - len - p);
+    };
+    console.log(`${colors.cyan}┌${line}┐${colors.reset}`);
+    console.log(`${colors.cyan}│${colors.reset}${pad(text1)}${colors.cyan}│${colors.reset}`);
+    console.log(`${colors.cyan}│${colors.reset}${pad(text2)}${colors.cyan}│${colors.reset}`);
+    console.log(`${colors.cyan}└${line}┘${colors.reset}\n`);
+}
 
 const logger = {
-  info: (msg) => console.log(`${colors.blue}[ ℹ INFO ] → ${msg}${colors.reset}`),
-  warn: (msg) => console.log(`${colors.yellow}[ ⚠ WARNING ] → ${msg}${colors.reset}`),
-  error: (msg) => console.log(`${colors.red}[ ✖ ERROR ] → ${msg}${colors.reset}`),
-  success: (msg) => console.log(`${colors.green}[ ✔ DONE ] → ${msg}${colors.reset}`),
-  loading: (msg) => console.log(`${colors.cyan}[ ⌛ LOADING ] → ${msg}${colors.reset}`),
-  step: (msg) => console.log(`${colors.magenta}[ ➔ STEP ] → ${msg}${colors.reset}`),
-  wallet: (msg) => console.log(`${colors.gold}[ 💰 WALLET ] → ${msg}${colors.reset}`),
-  user: (msg) => console.log(`\n${colors.white}[➤] ${msg}${colors.reset}`),
-  banner: () => fancyBox(' 🍉🍉 Free Palestine 🍉🍉', '— 19Seniman From Insider 🏴‍☠️ —'),
+    info: (msg) => console.log(`${colors.blue}[ ℹ INFO ] → ${msg}${colors.reset}`),
+    warn: (msg) => console.log(`${colors.yellow}[ ⚠ WARNING ] → ${msg}${colors.reset}`),
+    error: (msg) => console.log(`${colors.red}[ ✖ ERROR ] → ${msg}${colors.reset}`),
+    success: (msg) => console.log(`${colors.green}[ ✔ DONE ] → ${msg}${colors.reset}`),
+    loading: (msg) => console.log(`${colors.cyan}[ ⌛ LOADING ] → ${msg}${colors.reset}`),
+    step: (msg) => console.log(`${colors.magenta}[ ➔ STEP ] → ${msg}${colors.reset}`),
+    wallet: (msg) => console.log(`${colors.gold}[ 💰 WALLET ] → ${msg}${colors.reset}`),
+    user: (msg) => console.log(`\n${colors.white}[➤] ${msg}${colors.reset}`),
+    banner: () => fancyBox(' 🍉🍉 Free Palestine 🍉🍉', '— 19Seniman From Insider 🏴‍☠️ —'),
 };
 
-const networkConfig = {
-  name: 'Pharos Testnet',
-  chainId: 688688,
-  rpcUrl: 'https://testnet.dplabs-internal.com',
-  currencySymbol: 'PHRS',
-};
+// --- Constants & Config ---
+const PHAROS_RPC_URL = 'https://atlantic.dplabs-internal.com';
+const CHAIN_ID = 688689;
+const PHAROS_API_BASE = 'https://api.pharosnetwork.xyz';
+const ASSETO_API_BASE = 'https://asseto.finance/api';
 
-const tokens = {
-  USDC: '0xad902cf99c2de2f1ba5ec4d642fd7e49cae9ee37',
-  WPHRS: '0x76aaada469d23216be5f7c596fa25f282ff9b364',
-  USDT: '0xed59de2d7ad9c043442e381231ee3646fc3c2939',
-  POSITION_MANAGER: '0xF8a1D4FF0f9b9Af7CE58E1fc1833688F3BFd6115',
-};
+const CASHPLUS_ADDRESS = '0x56f4add11d723412d27a9e9433315401b351d6e3';
+const USDT_ADDRESS_CONST = '0xe7e84b8b4f39c507499c40b4ac199b050e2882d5';
 
-const poolAddresses = {
-  USDC_WPHRS: '0x0373a059321219745aee4fad8a942cf088be3d0e',
-  USDT_WPHRS: '0x70118b6eec45329e0534d849bc3e588bb6752527',
-};
+const FAROSWAP_REFERER = 'https://faroswap.xyz/';
+const DODO_API = 'https://api.dodoex.io';
+const DODO_ROUTE_ENDPOINT = `${DODO_API}/route-service/v2/widget/getdodoroute`;
+const DODO_PRICE_ENDPOINT = `${DODO_API}/frontend-price-api/current/batch`;
+const DODO_APIKEY = 'a37546505892e1a952';
+const FARO_DODO_PROXY = '0x819829e5CF6e19F9fED92F6b4CC1edF45a2cC4A2';
+const FAROSWAP_SLIPPAGE = 3.225;
+const ROUTE_SOURCE = 'dodoV2AndMixWasm';
 
-const contractAddress = '0x1a4de519154ae51200b0ad7c90f7fac75547888a';
+const FAROSWAP_LIQUIDITY_ROUTER_ADDRESS = '0xb93Cd1E38809607a00FF9CaB633db5CAA6130dD0';
+const LIQUIDITY_TOKEN_A_OBJ = { symbol: 'WPHRS', address: '0x838800b758277CC111B2d48Ab01e5E164f8E9471', decimals: 18 };
+const LIQUIDITY_TOKEN_B_OBJ = { symbol: 'USDT', address: '0xE7E84B8B4f39C507499c40B4ac199B050e2882d5', decimals: 6 };
 
-const tokenDecimals = {
-  WPHRS: 18,
-  USDC: 6,
-  USDT: 6,
-};
+const LIQUIDITY_AMOUNT_A_WEI = '0x640b5eece000';
+const LIQUIDITY_AMOUNT_B_WEI = '0xd7c8';
+const LIQUIDITY_AMOUNT_A_MIN_WEI = '0x638b505ee400';
+const LIQUIDITY_AMOUNT_B_MIN_WEI = '0xd6b3';
+const LIQUIDITY_FEE_UINT = 30n;
 
-const contractAbi = [
-  {
-    inputs: [
-      { internalType: 'uint256', name: 'collectionAndSelfcalls', type: 'uint256' },
-      { internalType: 'bytes[]', name: 'data', type: 'bytes[]' },
-    ],
-    name: 'multicall',
-    outputs: [],
-    stateMutability: 'nonpayable',
-    type: 'function',
-  },
+const FAROSWAP_LIQUIDITY_ROUTER_ABI = [
+    "function addLiquidity(address tokenA, address tokenB, uint256 fee, uint256 amountADesired, uint256 amountBDesired, uint256 amountAMin, uint256 amountBMin, address to, uint256 deadline)"
 ];
 
-const erc20Abi = [
-  'function balanceOf(address) view returns (uint256)',
-  'function allowance(address owner, address spender) view returns (uint256)',
-  'function approve(address spender, uint256 amount) public returns (bool)',
-  'function decimals() view returns (uint8)',
-  'function deposit() public payable',
-  'function withdraw(uint256 wad) public',
-];
+const EXPLORER_URL = 'https://atlantic.pharosscan.xyz';
+const PHRS_TO_SEND = '0.009';
 
-const positionManagerAbi = [
-  {
-    inputs: [
-      {
-        components: [
-          { internalType: 'address', name: 'token0', type: 'address' },
-          { internalType: 'address', name: 'token1', type: 'address' },
-          { internalType: 'uint24', name: 'fee', type: 'uint24' },
-          { internalType: 'int24', name: 'tickLower', type: 'int24' },
-          { internalType: 'int24', name: 'tickUpper', type: 'int24' },
-          { internalType: 'uint256', name: 'amount0Desired', type: 'uint256' },
-          { internalType: 'uint256', name: 'amount1Desired', type: 'uint256' },
-          { internalType: 'uint256', name: 'amount0Min', type: 'uint256' },
-          { internalType: 'uint256', name: 'amount1Min', type: 'uint256' },
-          { internalType: 'address', name: 'recipient', type: 'address' },
-          { internalType: 'uint256', name: 'deadline', type: 'uint256' },
-        ],
-        internalType: 'struct INonfungiblePositionManager.MintParams',
-        name: 'params',
-        type: 'tuple',
-      },
-    ],
-    name: 'mint',
-    outputs: [
-      { internalType: 'uint256', name: 'tokenId', type: 'uint256' },
-      { internalType: 'uint128', name: 'liquidity', type: 'uint128' },
-      { internalType: 'uint256', name: 'amount0', type: 'uint256' },
-      { internalType: 'uint256', name: 'amount1', type: 'uint256' },
-    ],
-    stateMutability: 'payable',
-    type: 'function',
-  },
-];
-
-const pairOptions = [
-  { id: 1, from: 'WPHRS', to: 'USDC', amount: 0.0001 },
-  { id: 2, from: 'WPHRS', to: 'USDT', amount: 0.0001 },
-  { id: 3, from: 'USDC', to: 'WPHRS', amount: 0.0001 },
-  { id: 4, from: 'USDT', to: 'WPHRS', amount: 0.0001 },
-  { id: 5, from: 'USDC', to: 'USDT', amount: 0.0001 },
-  { id: 6, from: 'USDT', to: 'USDC', amount: 0.0001 },
-];
-
-const lpOptions = [
-  { id: 1, token0: 'WPHRS', token1: 'USDC', amount0: 0.0001, amount1: 0.0001, fee: 3000 },
-  { id: 2, token0: 'WPHRS', token1: 'USDT', amount0: 0.0001, amount1: 0.0001, fee: 3000 },
-];
-
-const loadProxies = () => {
-  try {
-    const proxies = fs.readFileSync('proxies.txt', 'utf8')
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line);
-    return proxies;
-  } catch (error) {
-    logger.warn('No proxies.txt found or failed to load, switching to direct mode');
-    return [];
-  }
+const TOKENS = {
+    PHRS: { symbol: 'PHRS', address: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', decimals: 18, isNative: true },
+    WPHRS: { symbol: 'WPHRS', address: '0x838800b758277CC111B2d48Ab01e5E164f8E9471', decimals: 18, isNative: false },
+    USDT: { symbol: 'USDT', address: '0xE7E84B8B4f39C507499c40B4ac199B050e2882d5', decimals: 6, isNative: false },
+    USDC: { symbol: 'USDC', address: '0xE0BE08c77f415F577A1B3A9aD7a1Df1479564ec8', decimals: 6, isNative: false },
+    WETH: { symbol: 'WETH', address: '0x7d211F77525ea39A0592794f793cC1036eEaccD5', decimals: 18, isNative: false },
+    WBTC: { symbol: 'WBTC', address: '0x0c64F03EEa5c30946D5c55B4b532D08ad74638a4', decimals: 18, isNative: false },
 };
 
-const getRandomProxy = (proxies) => {
-  return proxies[Math.floor(Math.random() * proxies.length)];
-};
+const ERC20_ABI = [
+    "function approve(address spender, uint256 amount) returns (bool)",
+    "function allowance(address owner, address spender) view returns (uint256)",
+    "function decimals() view returns (uint8)"
+];
+const CASHPLUS_ABI = [
+    "function subscribe(address uAddress, uint256 uAmount)",
+    "function redemption(address uAddress, uint256 tokenAmount)"
+];
 
-const setupProvider = (proxy = null) => {
-  if (proxy) {
-    logger.info(`Using proxy: ${proxy}`);
-    const agent = new HttpsProxyAgent(proxy);
-    return new ethers.JsonRpcProvider(networkConfig.rpcUrl, {
-      chainId: networkConfig.chainId,
-      name: networkConfig.name,
-    }, {
-      fetchOptions: { agent },
-      headers: { 'User-Agent': randomUseragent.getRandom() },
-    });
-  } else {
-    logger.info('Using direct mode (no proxy)');
-    return new ethers.JsonRpcProvider(networkConfig.rpcUrl, {
-      chainId: networkConfig.chainId,
-      name: networkConfig.name,
-    });
-  }
-};
+const WALLETS_FILE = 'wallets.json';
 
-const waitForTransactionWithRetry = async (provider, txHash, maxRetries = 5, baseDelayMs = 1000) => {
-  let retries = 0;
-  while (retries < maxRetries) {
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+function loadProxies() {
     try {
-      const receipt = await provider.getTransactionReceipt(txHash);
-      if (receipt) {
-        return receipt;
-      }
-      logger.warn(`Transaction receipt not found for ${txHash}, retrying (${retries + 1}/${maxRetries})...`);
-      await new Promise(resolve => setTimeout(resolve, baseDelayMs * Math.pow(2, retries)));
-      retries++;
-    } catch (error) {
-      logger.error(`Error fetching transaction receipt for ${txHash}: ${error.message}`);
-      if (error.code === -32008 || error.message.includes('TX_REPLAY_ATTACK')) { // Tambahkan penanganan TX_REPLAY_ATTACK
-        logger.warn(`RPC error (${error.code || 'UNKNOWN'}) or TX_REPLAY_ATTACK, retrying (${retries + 1}/${maxRetries})...`);
-        await new Promise(resolve => setTimeout(resolve, baseDelayMs * Math.pow(2, retries)));
-        retries++;
-      } else {
-        throw error;
-      }
+        const data = fs.readFileSync('proxies.txt', 'utf8');
+        const proxies = data.split('\n').filter(p => p.trim() !== '');
+        if (proxies.length === 0) {
+            logger.warn('proxies.txt is empty. Running without proxies.');
+            return [];
+        }
+        logger.success(`Loaded ${proxies.length} proxies.`);
+        return proxies;
+    } catch (err) {
+        logger.warn('proxies.txt not found. Running without proxies.');
+        return [];
     }
-  }
-  throw new Error(`Failed to get transaction receipt for ${txHash} after ${maxRetries} retries`);
-};
+}
 
-const getGasOptions = async (provider) => {
-  const feeData = await provider.getFeeData();
-  const gasOptions = {};
-
-  if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
-    gasOptions.maxFeePerGas = feeData.maxFeePerGas;
-    gasOptions.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
-  } else if (feeData.gasPrice) {
-    gasOptions.gasPrice = feeData.gasPrice;
-  } else {
-    gasOptions.gasPrice = ethers.parseUnits('1', 'gwei');
-  }
-  return gasOptions;
-};
-
-// Objek untuk menyimpan nonce per alamat dompet
-const walletNonces = {};
-
-const getWalletNonce = async (wallet) => {
-    // Dapatkan nonce dari cache atau dari jaringan jika belum ada
-    let nonce = walletNonces[wallet.address];
-    if (typeof nonce === 'undefined') {
-        nonce = await wallet.provider.getTransactionCount(wallet.address, 'latest');
-        walletNonces[wallet.address] = nonce;
+function getProxyAgent(proxies) {
+    if (proxies.length === 0) {
+        return null;
     }
-    return nonce;
-};
+    const proxyString = proxies[Math.floor(Math.random() * proxies.length)];
+    return new HttpsProxyAgent(proxyString);
+}
 
-const incrementWalletNonce = (walletAddress) => {
-    walletNonces[walletAddress]++;
-};
+function staticUserAgent() {
+    return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36';
+}
 
+function loadAccounts() {
+    const accounts = [];
+    let i = 1;
+    while (process.env[`PRIVATE_KEY_${i}`]) {
+        accounts.push({
+            index: i,
+            pk: process.env[`PRIVATE_KEY_${i}`],
+        });
+        i++;
+    }
+    if (accounts.length === 0) {
+        logger.error('No accounts found in .env file.');
+        logger.error('Please format as PRIVATE_KEY_1=...');
+        process.exit(1);
+    }
+    logger.success(`Loaded ${accounts.length} accounts from .env`);
+    return accounts;
+}
 
-const checkBalanceAndApproval = async (wallet, tokenAddress, amount, decimals, spender) => {
-  try {
-    const tokenContract = new ethers.Contract(tokenAddress, erc20Abi, wallet);
-    const balance = await tokenContract.balanceOf(wallet.address);
-    const required = ethers.parseUnits(amount.toString(), decimals);
+function createAxiosInstance(proxyAgent) {
+    return axios.create({
+        httpsAgent: proxyAgent,
+        headers: {
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Priority': 'u=1, i',
+            'Sec-Ch-Ua': '"Brave";v="141", "Not?A_Brand";v="8", "Chromium";v="141"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"Windows"',
+            'Sec-Fetch-Dest': 'empty',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'same-site',
+            'Sec-Gpc': '1',
+            'User-Agent': staticUserAgent(),
+        }
+    });
+}
 
-    if (balance < required) {
-      logger.warn(
-        `Skipping: Insufficient ${Object.keys(tokenDecimals).find(
-          key => tokenDecimals[key] === decimals
-        )} balance: ${ethers.formatUnits(balance, decimals)} < ${amount}`
-      );
-      return false;
+function askQuestion(query, rl) {
+    return new Promise(resolve => rl.question(query, resolve));
+}
+
+function loadRandomWallets() {
+    try {
+        if (fs.existsSync(WALLETS_FILE)) {
+            const data = fs.readFileSync(WALLETS_FILE, 'utf8');
+            return JSON.parse(data);
+        }
+        return [];
+    } catch (err) {
+        logger.error(`Error reading ${WALLETS_FILE}: ${err.message}`);
+        return [];
+    }
+}
+
+function saveRandomWallet(wallet) {
+    const wallets = loadRandomWallets();
+    wallets.push({
+        address: wallet.address,
+        privateKey: wallet.privateKey
+    });
+    try {
+        fs.writeFileSync(WALLETS_FILE, JSON.stringify(wallets, null, 2));
+        logger.info(`Saved new random wallet: ${wallet.address}`);
+    } catch (err) {
+        logger.error(`Failed to save ${WALLETS_FILE}: ${err.message}`);
+    }
+}
+
+function createPharosSiweMessage(address, chainId, domain, uri, nonce, timestamp) {
+    return `${domain} wants you to sign in with your Ethereum account:
+${address}
+
+I accept the Pharos Terms of Service: ${domain}/privacy-policy/Pharos-PrivacyPolicy.pdf
+
+URI: ${uri}
+
+Version: 1
+
+Chain ID: ${chainId}
+
+Nonce: ${nonce}
+
+Issued At: ${timestamp}`;
+}
+
+async function pharosLogin(wallet, axiosInstance) {
+    logger.loading('Attempting Pharos login to get JWT...');
+    axiosInstance.defaults.headers.common['Referer'] = 'https://testnet.pharosnetwork.xyz/';
+    axiosInstance.defaults.headers.common['Authorization'] = 'Bearer null';
+    axiosInstance.defaults.headers.post['Content-Type'] = 'application/json';
+
+    try {
+        const domain = 'testnet.pharosnetwork.xyz';
+        const uri = 'https://testnet.pharosnetwork.xyz';
+        const chainId = CHAIN_ID.toString();
+        const timestamp = new Date().toISOString();
+        const nonce = Math.floor(Math.random() * 10000000).toString();
+        const message = createPharosSiweMessage(wallet.address, chainId, domain, uri, nonce, timestamp);
+
+        logger.loading('Signing Pharos login message...');
+        const signature = await wallet.signMessage(message);
+
+        const loginBody = {
+            address: wallet.address,
+            signature: signature,
+            wallet: "Rabby Wallet",
+            nonce: nonce,
+            chain_id: chainId,
+            timestamp: timestamp,
+            domain: domain
+        };
+
+        const res = await axiosInstance.post(`${PHAROS_API_BASE}/user/login`, loginBody);
+
+        if (res.data.code === 0 && res.data.data.jwt) {
+            logger.success('Successfully logged into Pharos and got JWT.');
+            return res.data.data.jwt;
+        } else {
+            logger.error(`Pharos login failed: ${res.data.msg || 'Unknown error'}`);
+            return null;
+        }
+    } catch (err) {
+        logger.error(`Pharos login request failed: ${err.message}`);
+        if (err.response) {
+            logger.error(`Response Data: ${JSON.stringify(err.response.data)}`);
+        }
+        return null;
+    }
+}
+
+async function pharosCheckInAndProfile(wallet, jwt, axiosInstance) {
+    logger.wallet(`Address: ${wallet.address}`);
+    axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${jwt}`;
+    axiosInstance.defaults.headers.common['Referer'] = 'https://testnet.pharosnetwork.xyz/';
+
+    try {
+        logger.loading('Performing daily check-in...');
+        const checkinRes = await axiosInstance.post(`${PHAROS_API_BASE}/sign/in`, { address: wallet.address });
+        if (checkinRes.data.code === 0) {
+            logger.success('Daily check-in successful.');
+        } else {
+            logger.warn(`Check-in response: ${checkinRes.data.msg || 'Unknown error'}`);
+        }
+    } catch (err) {
+        logger.error(`Check-in failed: ${err.message}`);
     }
 
-    const allowance = await tokenContract.allowance(wallet.address, spender);
-    if (allowance < required) {
-      logger.step(`Approving ${amount} tokens for ${spender}...`);
-      
-      const gasOptions = await getGasOptions(wallet.provider);
-      const nonce = await getWalletNonce(wallet); // Dapatkan nonce
-      
-      const estimatedGas = await tokenContract.approve.estimateGas(spender, ethers.MaxUint256, { from: wallet.address, ...gasOptions });
-      
-      const approveTx = await tokenContract.approve(spender, ethers.MaxUint256, {
-        gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
-        nonce: nonce, // Gunakan nonce yang didapat
-        ...gasOptions,
-      });
-      incrementWalletNonce(wallet.address); // Increment nonce setelah transaksi dikirim
-      const receipt = await waitForTransactionWithRetry(wallet.provider, approveTx.hash);
-      logger.success('Approval completed');
+    await delay(1000);
+
+    try {
+        logger.loading('Fetching user profile...');
+        const profileRes = await axiosInstance.get(`${PHAROS_API_BASE}/user/profile?address=${wallet.address}`);
+        if (profileRes.data.code === 0 && profileRes.data.data.user_info) {
+            const info = profileRes.data.data.user_info;
+            logger.success('Fetched profile:');
+            console.log(`   > ${colors.cyan}Address:${colors.reset} ${info.Address}`);
+            console.log(`   > ${colors.cyan}Total Points:${colors.reset} ${info.TotalPoints}`);
+            console.log(`   > ${colors.cyan}Invite Code:${colors.reset} ${info.InviteCode}`);
+        } else {
+            logger.warn(`Could not fetch profile: ${profileRes.data.msg}`);
+        }
+    } catch (err) {
+        logger.error(`Fetch profile failed: ${err.message}`);
+    }
+}
+
+async function pharosSend(wallet, toAddress, amount, axiosInstance, pharosJwt) {
+    let txHash = '';
+    try {
+        const amountParsed = ethers.parseEther(amount);
+        logger.loading(`Sending ${amount} PHRS to ${toAddress}...`);
+
+        const tx = await wallet.sendTransaction({
+            to: toAddress,
+            value: amountParsed,
+        });
+
+        logger.info(`Transaction sent: ${tx.hash}`);
+        const receipt = await tx.wait();
+        txHash = receipt.hash;
+        logger.success(`Transaction confirmed! Block: ${receipt.blockNumber}`);
+
+    } catch (err) {
+        logger.error(`PHRS Send (on-chain) failed: ${err.message}`);
+        return false;
     }
 
+    if (txHash) {
+        try {
+            logger.loading("Verifying 'Send' task (ID 401) with Pharos API...");
+            axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${pharosJwt}`;
+            axiosInstance.defaults.headers.common['Referer'] = 'https://testnet.pharosnetwork.xyz/';
+
+            const verifyBody = {
+                address: wallet.address,
+                task_id: 401,
+                tx_hash: txHash
+            };
+
+            const verifyRes = await axiosInstance.post(`${PHAROS_API_BASE}/task/verify`, verifyBody);
+
+            if (verifyRes.data.code === 0 && verifyRes.data.data.verified) {
+                logger.success("Pharos API verified the 'Send' task successfully.");
+            } else {
+                logger.warn(`API verification failed: ${verifyRes.data.msg || 'Unknown error'}`);
+            }
+        } catch (err) {
+            logger.error(`Pharos 'Send' task verification request failed: ${err.message}`);
+        }
+    }
     return true;
-  } catch (error) {
-    logger.error(`Balance/approval check failed: ${error.message}`);
-    // Jika ada error, coba perbarui nonce dari jaringan
-    if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
-        logger.warn('Nonce issue detected during approval, refreshing nonce...');
-        walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
-    }
-    return false;
-  }
-};
+}
 
-const getUserInfo = async (wallet, proxy = null, jwt) => {
-  try {
-    logger.user(`Fetching user info for wallet: ${wallet.address}`);
-    const profileUrl = `https://api.pharosnetwork.xyz/user/profile?address=${wallet.address}`;
-    const headers = {
-      accept: "application/json, text/plain, */*",
-      "accept-language": "en-US,en;q=0.8",
-      authorization: `Bearer ${jwt}`,
-      "sec-ch-ua": '"Chromium";v="136", "Brave";v="136", "Not.A/Brand";v="99"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Windows"',
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-site",
-      "sec-gpc": "1",
-      Referer: "https://testnet.pharosnetwork.xyz/",
-      "Referrer-Policy": "strict-origin-when-cross-origin",
-      "User-Agent": randomUseragent.getRandom(),
-    };
+async function getAssetoJwt(wallet, axiosInstance) {
+    axiosInstance.defaults.headers.common['Referer'] = 'https://testnet.asseto.finance/';
+    delete axiosInstance.defaults.headers.common['Authorization'];
 
-    const axiosConfig = {
-      method: 'get',
-      url: profileUrl,
-      headers,
-      httpsAgent: proxy ? new HttpsProxyAgent(proxy) : null,
-    };
-
-    logger.loading('Fetching user profile...');
-    const response = await axios(axiosConfig);
-    const data = response.data;
-
-    if (data.code !== 0 || !data.data.user_info) {
-      logger.error(`Failed to fetch user info: ${data.msg || 'Unknown error'}`);
-      return;
-    }
-
-    const userInfo = data.data.user_info;
-    logger.info(`User ID: ${userInfo.ID}`);
-    logger.info(`Task Points: ${userInfo.TaskPoints}`);
-    logger.info(`Total Points: ${userInfo.TotalPoints}`);
-  } catch (error) {
-    logger.error(`Failed to fetch user info: ${error.message}`);
-  }
-};
-
-const verifyTask = async (wallet, proxy, jwt, txHash) => {
-  try {
-    logger.step(`Verifying task ID 103 for transaction: ${txHash}`);
-    const cleanTxHash = txHash.startsWith('0x') ? txHash.substring(2) : txHash;
-    const verifyUrl = `https://api.pharosnetwork.xyz/task/verify?address=${wallet.address}&task_id=103&tx_hash=${cleanTxHash}`;
-    
-    const headers = {
-      accept: "application/json, text/plain, */*",
-      "accept-language": "en-US,en;q=0.8",
-      authorization: `Bearer ${jwt}`,
-      priority: "u=1, i",
-      "sec-ch-ua": '"Chromium";v="136", "Brave";v="136", "Not.A/Brand";v="99"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Windows"',
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-site",
-      "sec-gpc": "1",
-      Referer: "https://testnet.pharosnetwork.xyz/",
-      "Referrer-Policy": "strict-origin-when-cross-origin",
-      "User-Agent": randomUseragent.getRandom(),
-    };
-
-    const axiosConfig = {
-      method: 'post',
-      url: verifyUrl,
-      headers,
-      httpsAgent: proxy ? new HttpsProxyAgent(proxy) : null,
-    };
-
-    logger.loading('Sending task verification request...');
-    const response = await axios(axiosConfig);
-    const data = response.data;
-
-    if (data.code === 0 && data.data.verified) {
-      logger.success(`Task ID 103 verified successfully for ${txHash}`);
-      return true;
-    } else {
-      logger.warn(`Task verification failed: ${data.msg || 'Unknown error'}`);
-      return false;
-    }
-  } catch (error) {
-    logger.error(`Task verification failed for ${txHash}: ${error.message}`);
-    return false;
-  }
-};
-
-const getMulticallData = (pair, amount, walletAddress) => {
-  try {
-    const decimals = tokenDecimals[pair.from];
-    const scaledAmount = ethers.parseUnits(amount.toString(), decimals);
-
-    const data = ethers.AbiCoder.defaultAbiCoder().encode(
-      ['address', 'address', 'uint256', 'address', 'uint256', 'uint256', 'uint256'],
-      [
-        tokens[pair.from],
-        tokens[pair.to],
-        500, // This is likely the pool fee. You might want to make this configurable or retrieve it.
-        walletAddress,
-        scaledAmount,
-        0, // amountOutMin
-        0, // sqrtPriceLimitX96
-      ]
-    );
-    return [ethers.concat(['0x04e45aaf', data])];
-  } catch (error) {
-    logger.error(`Failed to generate multicall data: ${error.message}`);
-    return [];
-  }
-};
-
-const performSwap = async (wallet, provider, index, jwt, proxy) => {
-  try {
-    const pair = pairOptions[Math.floor(Math.random() * pairOptions.length)];
-    const amount = pair.amount;
-    logger.step(
-      `Preparing swap ${index + 1}: ${pair.from} -> ${pair.to} (${amount} ${pair.from})`
-    );
-
-    const decimals = tokenDecimals[pair.from];
-    const tokenContract = new ethers.Contract(tokens[pair.from], erc20Abi, provider);
-    const balance = await tokenContract.balanceOf(wallet.address);
-    const required = ethers.parseUnits(amount.toString(), decimals);
-
-    if (balance < required) {
-      logger.warn(
-        `Skipping swap ${index + 1}: Insufficient ${pair.from} balance: ${ethers.formatUnits(
-          balance,
-          decimals
-        )} < ${amount}`
-      );
-      return;
-    }
-
-    if (!(await checkBalanceAndApproval(wallet, tokens[pair.from], amount, decimals, contractAddress))) {
-      return;
-    }
-
-    const contract = new ethers.Contract(contractAddress, contractAbi, wallet);
-    const multicallData = getMulticallData(pair, amount, wallet.address);
-
-    if (!multicallData || multicallData.length === 0 || multicallData.some(data => !data || data === '0x')) {
-      logger.error(`Invalid or empty multicall data for ${pair.from} -> ${pair.to}`);
-      return;
-    }
-
-    const deadline = Math.floor(Date.now() / 1000) + 300;
-    
-    const gasOptions = await getGasOptions(provider);
-    const nonce = await getWalletNonce(wallet); // Dapatkan nonce
-
-    let estimatedGas;
     try {
-      estimatedGas = await contract.multicall.estimateGas(deadline, multicallData, {
-        from: wallet.address,
-        nonce: nonce, // Gunakan nonce yang didapat
-        ...gasOptions,
-      });
-    } catch (error) {
-      logger.error(`Gas estimation failed for swap ${index + 1}: ${error.message}`);
-      // Jika estimasi gas gagal karena nonce, coba perbarui nonce dari jaringan
-      if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
-          logger.warn('Nonce issue detected during gas estimation for swap, refreshing nonce...');
-          walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
-      }
-      return;
+        logger.loading('Getting Asseto nonce...');
+        const nonceRes = await axiosInstance.get(`${ASSETO_API_BASE}/nonce?address=${wallet.address}`);
+        const { nonce, nonceId } = nonceRes.data.data;
+        if (!nonce) {
+            logger.error('Failed to get Asseto nonce.');
+            return null;
+        }
+
+        logger.loading('Signing Asseto nonce...');
+        const signature = await wallet.signMessage(nonce.toString());
+
+        logger.loading('Logging into Asseto...');
+        const loginRes = await axiosInstance.post(`${ASSETO_API_BASE}/login`, {
+            nonceId: nonceId,
+            signature: signature
+        });
+
+        if (loginRes.data.code === 10000 && loginRes.data.data) {
+            logger.success('Successfully logged into Asseto.');
+            return loginRes.data.data;
+        } else {
+            logger.error(`Asseto login failed: ${loginRes.data.message}`);
+            return null;
+        }
+    } catch (err) {
+        logger.error(`Asseto login process failed: ${err.message}`);
+        return null;
     }
+}
 
-    const tx = await contract.multicall(deadline, multicallData, {
-      gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
-      nonce: nonce, // Gunakan nonce yang didapat
-      ...gasOptions,
-    });
-
-    incrementWalletNonce(wallet.address); // Increment nonce setelah transaksi dikirim
-    logger.loading(`Swap transaction ${index + 1} sent, waiting for confirmation...`);
-    const receipt = await waitForTransactionWithRetry(provider, tx.hash);
-    logger.success(`Swap ${index + 1} completed: ${receipt.hash}`);
-    logger.step(`Explorer: https://testnet.pharosscan.xyz/tx/${receipt.hash}`);
-
-    await verifyTask(wallet, proxy, jwt, receipt.hash);
-  } catch (error) {
-    logger.error(`Swap ${index + 1} failed: ${error.message}`);
-    if (error.transaction) {
-      logger.error(`Transaction details: ${JSON.stringify(error.transaction, null, 2)}`);
-    }
-    if (error.receipt) {
-      logger.error(`Receipt: ${JSON.stringify(error.receipt, null, 2)}`);
-    }
-     // Jika ada error, coba perbarui nonce dari jaringan
-    if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
-        logger.warn('Nonce issue detected after swap failure, refreshing nonce...');
-        walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
-    }
-  }
-};
-
-const transferPHRS = async (wallet, provider, index, jwt, proxy) => {
-  try {
-    const amount = 0.000001;
-    const randomWallet = ethers.Wallet.createRandom();
-    const toAddress = randomWallet.address;
-    logger.step(`Preparing PHRS transfer ${index + 1}: ${amount} PHRS to ${toAddress}`);
-
-    const balance = await provider.getBalance(wallet.address);
-    const required = ethers.parseEther(amount.toString());
-
-    if (balance < required) {
-      logger.warn(`Skipping transfer ${index + 1}: Insufficient PHRS balance: ${ethers.formatEther(balance)} < ${amount}`);
-      return;
-    }
-    
-    const gasOptions = await getGasOptions(provider);
-    const nonce = await getWalletNonce(wallet); // Dapatkan nonce
-
-    const tx = await wallet.sendTransaction({
-      to: toAddress,
-      value: required,
-      gasLimit: 21000,
-      nonce: nonce, // Gunakan nonce yang didapat
-      ...gasOptions,
-    });
-
-    incrementWalletNonce(wallet.address); // Increment nonce setelah transaksi dikirim
-    logger.loading(`Transfer transaction ${index + 1} sent, waiting for confirmation...`);
-    const receipt = await waitForTransactionWithRetry(provider, tx.hash);
-    logger.success(`Transfer ${index + 1} completed: ${receipt.hash}`);
-    logger.step(`Explorer: https://testnet.pharosscan.xyz/tx/${receipt.hash}`);
-
-    await verifyTask(wallet, proxy, jwt, receipt.hash);
-  } catch (error) {
-    logger.error(`Transfer ${index + 1} failed: ${error.message}`);
-    if (error.transaction) {
-      logger.error(`Transaction details: ${JSON.stringify(error.transaction, null, 2)}`);
-    }
-    if (error.receipt) {
-      logger.error(`Receipt: ${JSON.stringify(error.receipt, null, 2)}`);
-    }
-    // Jika ada error, coba perbarui nonce dari jaringan
-    if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
-        logger.warn('Nonce issue detected after transfer failure, refreshing nonce...');
-        walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
-    }
-  }
-};
-
-const wrapPHRS = async (wallet, provider, index, jwt, proxy) => {
-  try {
-    const minAmount = 0.001;
-    const maxAmount = 0.005;
-    const amount = minAmount + Math.random() * (maxAmount - minAmount);
-    const amountWei = ethers.parseEther(amount.toFixed(6).toString());
-    logger.step(`Preparing wrap PHRS ${index + 1}: ${amount.toFixed(6)} PHRS to WPHRS`);
-
-    const balance = await provider.getBalance(wallet.address);
-    if (balance < amountWei) {
-      logger.warn(`Skipping wrap ${index + 1}: Insufficient PHRS balance: ${ethers.formatEther(balance)} < ${amount.toFixed(6)}`);
-      return;
-    }
-
-    const wphrsContract = new ethers.Contract(tokens.WPHRS, erc20Abi, wallet);
-    
-    const gasOptions = await getGasOptions(provider);
-    const nonce = await getWalletNonce(wallet); // Dapatkan nonce
-
-    let estimatedGas;
+async function approveToken(wallet, tokenContract, spenderAddress, amount) {
     try {
-      estimatedGas = await wphrsContract.deposit.estimateGas({ value: amountWei, ...gasOptions });
-    } catch (error) {
-      logger.error(`Gas estimation failed for wrap ${index + 1}: ${error.message}`);
-      // Jika estimasi gas gagal karena nonce, coba perbarui nonce dari jaringan
-      if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
-          logger.warn('Nonce issue detected during gas estimation for wrap, refreshing nonce...');
-          walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
-      }
-      return;
+        logger.loading(`Checking allowance for ${spenderAddress}...`);
+        const allowance = await tokenContract.allowance(wallet.address, spenderAddress);
+
+        if (allowance < BigInt(amount)) {
+            logger.warn('Allowance is insufficient. Sending approve transaction...');
+            const approveTx = await tokenContract.approve(spenderAddress, amount);
+            logger.info(`Approve tx sent: ${approveTx.hash}`);
+            await approveTx.wait();
+            logger.success('Token approved successfully.');
+        } else {
+            logger.success('Allowance is sufficient.');
+        }
+        return true;
+    } catch (err) {
+        logger.error(`Token approve failed: ${err.message}`);
+        return false;
     }
+}
 
-    const tx = await wphrsContract.deposit({
-      value: amountWei,
-      gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
-      nonce: nonce, // Gunakan nonce yang didapat
-      ...gasOptions,
-    });
-
-    incrementWalletNonce(wallet.address); // Increment nonce setelah transaksi dikirim
-    logger.loading(`Wrap transaction ${index + 1} sent, waiting for confirmation...`);
-    const receipt = await waitForTransactionWithRetry(provider, tx.hash);
-    logger.success(`Wrap ${index + 1} completed: ${receipt.hash}`);
-    logger.step(`Explorer: https://testnet.pharosscan.xyz/tx/${receipt.hash}`);
-
-    await verifyTask(wallet, proxy, jwt, receipt.hash);
-  } catch (error) {
-    logger.error(`Wrap ${index + 1} failed: ${error.message}`);
-    if (error.transaction) {
-      logger.error(`Transaction details: ${JSON.stringify(error.transaction, null, 2)}`);
-    }
-    if (error.receipt) {
-      logger.error(`Receipt: ${JSON.stringify(error.receipt, null, 2)}`);
-    }
-    // Jika ada error, coba perbarui nonce dari jaringan
-    if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
-        logger.warn('Nonce issue detected after wrap failure, refreshing nonce...');
-        walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
-    }
-  }
-};
-
-const claimFaucet = async (wallet, proxy = null) => {
-  try {
-    logger.step(`Checking faucet eligibility for wallet: ${wallet.address}`);
-
-    const message = "pharos";
-    const signature = await wallet.signMessage(message);
-    logger.step(`Signed message: ${signature}`);
-
-    const loginUrl = `https://api.pharosnetwork.xyz/user/login?address=${wallet.address}&signature=${signature}&invite_code=S6NGMzXSCDBxhnwo`;
-    const headers = {
-      accept: "application/json, text/plain, */*",
-      "accept-language": "en-US,en;q=0.8",
-      authorization: "Bearer null",
-      "sec-ch-ua": '"Chromium";v="136", "Brave";v="136", "Not.A/Brand";v="99"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Windows"',
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-site",
-      "sec-gpc": "1",
-      Referer: "https://testnet.pharosnetwork.xyz/",
-      "Referrer-Policy": "strict-origin-when-cross-origin",
-      "User-Agent": randomUseragent.getRandom(),
-    };
-
-    const axiosConfig = {
-      method: 'post',
-      url: loginUrl,
-      headers,
-      httpsAgent: proxy ? new HttpsProxyAgent(proxy) : null,
-    };
-
-    logger.loading('Sending login request for faucet...');
-    const loginResponse = await axios(axiosConfig);
-    const loginData = loginResponse.data;
-
-    if (loginData.code !== 0 || !loginData.data.jwt) {
-      logger.error(`Login failed for faucet: ${loginData.msg || 'Unknown error'}`);
-      return false;
-    }
-
-    const jwt = loginData.data.jwt;
-    logger.success(`Login successful for faucet, JWT: ${jwt}`);
-
-    const statusUrl = `https://api.pharosnetwork.xyz/faucet/status?address=${wallet.address}`;
-    const statusHeaders = {
-      ...headers,
-      authorization: `Bearer ${jwt}`,
-    };
-
-    logger.loading('Checking faucet status...');
-    const statusResponse = await axios({
-      method: 'get',
-      url: statusUrl,
-      headers: statusHeaders,
-      httpsAgent: proxy ? new HttpsProxyAgent(proxy) : null,
-    });
-    const statusData = statusResponse.data;
-
-    if (statusData.code !== 0 || !statusData.data) {
-      logger.error(`Faucet status check failed: ${statusData.msg || 'Unknown error'}`);
-      return false;
-    }
-
-    if (!statusData.data.is_able_to_faucet) {
-      const nextAvailable = new Date(statusData.data.avaliable_timestamp * 1000).toLocaleString('en-US', { timeZone: 'Asia/Makassar' });
-      logger.warn(`Faucet not available until: ${nextAvailable}`);
-      return false;
-    }
-
-    const claimUrl = `https://api.pharosnetwork.xyz/faucet/daily?address=${wallet.address}`;
-    logger.loading('Claiming faucet...');
-    const claimResponse = await axios({
-      method: 'post',
-      url: claimUrl,
-      headers: statusHeaders,
-      httpsAgent: proxy ? new HttpsProxyAgent(proxy) : null,
-    });
-    const claimData = claimResponse.data;
-
-    if (claimData.code === 0) {
-      logger.success(`Faucet claimed successfully for ${wallet.address}`);
-      return true;
-    } else {
-      logger.error(`Faucet claim failed: ${claimData.msg || 'Unknown error'}`);
-      return false;
-    }
-  } catch (error) {
-    logger.error(`Faucet claim failed for ${wallet.address}: ${error.message}`);
-    return false;
-  }
-};
-
-const performCheckIn = async (wallet, proxy = null) => {
-  try {
-    logger.step(`Performing daily check-in for wallet: ${wallet.address}`);
-
-    const message = "pharos";
-    const signature = await wallet.signMessage(message);
-    logger.step(`Signed message: ${signature}`);
-
-    const loginUrl = `https://api.pharosnetwork.xyz/user/login?address=${wallet.address}&signature=${signature}&invite_code=S6NGMzXSCDBxhnwo`;
-    const headers = {
-      accept: "application/json, text/plain, */*",
-      "accept-language": "en-US,en;q=0.8",
-      authorization: "Bearer null",
-      "sec-ch-ua": '"Chromium";v="136", "Brave";v="136", "Not.A/Brand";v="99"',
-      "sec-ch-ua-mobile": "?0",
-      "sec-ch-ua-platform": '"Windows"',
-      "sec-fetch-dest": "empty",
-      "sec-fetch-mode": "cors",
-      "sec-fetch-site": "same-site",
-      "sec-gpc": "1",
-      Referer: "https://testnet.pharosnetwork.xyz/",
-      "Referrer-Policy": "strict-origin-when-cross-origin",
-      "User-Agent": randomUseragent.getRandom(),
-    };
-
-    const axiosConfig = {
-      method: 'post',
-      url: loginUrl,
-      headers,
-      httpsAgent: proxy ? new HttpsProxyAgent(proxy) : null,
-    };
-
-    logger.loading('Sending login request...');
-    const loginResponse = await axios(axiosConfig);
-    const loginData = loginResponse.data;
-
-    if (loginData.code !== 0 || !loginData.data.jwt) {
-      logger.error(`Login failed: ${loginData.msg || 'Unknown error'}`);
-      return null;
-    }
-
-    const jwt = loginData.data.jwt;
-    logger.success(`Login successful, JWT: ${jwt}`);
-
-    const checkInUrl = `https://api.pharosnetwork.xyz/sign/in?address=${wallet.address}`;
-    const checkInHeaders = {
-      ...headers,
-      authorization: `Bearer ${jwt}`,
-    };
-
-    logger.loading('Sending check-in request...');
-    const checkInResponse = await axios({
-      method: 'post',
-      url: checkInUrl,
-      headers: checkInHeaders,
-      httpsAgent: proxy ? new HttpsProxyAgent(proxy) : null,
-    });
-    const checkInData = checkInResponse.data;
-
-    if (checkInData.code === 0) {
-      logger.success(`Check-in successful for ${wallet.address}`);
-      return jwt;
-    } else {
-      logger.warn(`Check-in failed, possibly already checked in: ${checkInData.msg || 'Unknown error'}`);
-      return jwt;
-    }
-  } catch (error) {
-    logger.error(`Check-in failed for ${wallet.address}: ${error.message}`);
-    return null;
-  }
-};
-
-const addLiquidity = async (wallet, provider, index, jwt, proxy) => {
-  try {
-    const pair = lpOptions[Math.floor(Math.random() * lpOptions.length)];
-    const amount0 = pair.amount0;
-    const amount1 = pair.amount1;
-    logger.step(
-      `Preparing Liquidity Add ${index + 1}: ${pair.token0}/${pair.token1} (${amount0} ${pair.token0}, ${amount1} ${pair.token1})`
-    );
-
-    const decimals0 = tokenDecimals[pair.token0];
-    const amount0Wei = ethers.parseUnits(amount0.toString(), decimals0);
-    if (!(await checkBalanceAndApproval(wallet, tokens[pair.token0], amount0, decimals0, tokens.POSITION_MANAGER))) {
-      return;
-    }
-
-    const decimals1 = tokenDecimals[pair.token1];
-    const amount1Wei = ethers.parseUnits(amount1.toString(), decimals1);
-    if (!(await checkBalanceAndApproval(wallet, tokens[pair.token1], amount1, decimals1, tokens.POSITION_MANAGER))) {
-      return;
-    }
-
-    const positionManager = new ethers.Contract(tokens.POSITION_MANAGER, positionManagerAbi, wallet);
-
-    const deadline = Math.floor(Date.now() / 1000) + 600;
-    const tickLower = -60000;
-    const tickUpper = 60000;
-
-    const mintParams = {
-      token0: tokens[pair.token0],
-      token1: tokens[pair.token1],
-      fee: pair.fee,
-      tickLower,
-      tickUpper,
-      amount0Desired: amount0Wei,
-      amount1Desired: amount1Wei,
-      amount0Min: 0,
-      amount1Min: 0,
-      recipient: wallet.address,
-      deadline,
-    };
-    
-    const gasOptions = await getGasOptions(provider);
-    const nonce = await getWalletNonce(wallet); // Dapatkan nonce
-
-    let estimatedGas;
+async function assetoSubscribe(wallet, amount) {
     try {
-      estimatedGas = await positionManager.mint.estimateGas(mintParams, { from: wallet.address, ...gasOptions });
-    } catch (error) {
-      logger.error(`Gas estimation failed for LP ${index + 1}: ${error.message}`);
-      // Jika estimasi gas gagal karena nonce, coba perbarui nonce dari jaringan
-      if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
-          logger.warn('Nonce issue detected during gas estimation for LP, refreshing nonce...');
-          walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
-      }
-      return;
+        const usdtContract = new ethers.Contract(USDT_ADDRESS_CONST, ERC20_ABI, wallet);
+        const cashPlusContract = new ethers.Contract(CASHPLUS_ADDRESS, CASHPLUS_ABI, wallet);
+
+        const usdtDecimals = 6;
+        const amountParsed = ethers.parseUnits(amount, usdtDecimals);
+
+        logger.info(`Subscribing with ${amount} USDT...`);
+
+        const approved = await approveToken(wallet, usdtContract, CASHPLUS_ADDRESS, amountParsed);
+        if (!approved) return false;
+
+        logger.loading('Sending subscribe transaction...');
+        const tx = await cashPlusContract.subscribe(USDT_ADDRESS_CONST, amountParsed);
+        logger.info(`Subscribe tx sent: ${tx.hash}`);
+        await tx.wait();
+        logger.success(`Subscribe successful for ${amount} USDT.`);
+        return true;
+
+    } catch (err) {
+        logger.error(`Asseto Subscribe failed: ${err.message.slice(0, 200)}...`);
+        return false;
+    }
+}
+
+async function assetoRedeem(wallet, amount) {
+    try {
+        const cashPlusContract = new ethers.Contract(CASHPLUS_ADDRESS, [...CASHPLUS_ABI, ...ERC20_ABI], wallet);
+
+        const cashPlusDecimals = 18;
+        const amountParsed = ethers.parseUnits(amount, cashPlusDecimals);
+
+        logger.info(`Redeeming ${amount} CASH+...`);
+
+        const approved = await approveToken(wallet, cashPlusContract, CASHPLUS_ADDRESS, amountParsed);
+        if (!approved) return false;
+
+        logger.loading('Sending redemption transaction...');
+        const tx = await cashPlusContract.redemption(USDT_ADDRESS_CONST, amountParsed);
+        logger.info(`Redeem tx sent: ${tx.hash}`);
+        await tx.wait();
+        logger.success(`Redeem successful for ${amount} CASH+.`);
+        return true;
+
+    } catch (err) {
+        logger.error(`Asseto Redeem failed: ${err.message.slice(0, 200)}...`);
+        return false;
+    }
+}
+
+function tokenBySymbol(sym) {
+    const key = (sym || '').toUpperCase();
+    if (!TOKENS[key]) throw new Error(`Unsupported token symbol: ${sym}`);
+    return TOKENS[key];
+}
+
+async function ensureApprovalIfNeededFaroswap(wallet, fromToken, amountWei) {
+    if (fromToken.isNative) return true;
+    const erc20 = new ethers.Contract(fromToken.address, ERC20_ABI, wallet);
+    return approveToken(wallet, erc20, FARO_DODO_PROXY, amountWei);
+}
+
+async function getDodoRoute(axiosInstance, { chainId, fromTokenAddress, toTokenAddress, fromAmountWei, userAddress }) {
+    try {
+        const deadlineSec = Math.floor(Date.now() / 1000) + 900;
+        const params = new URLSearchParams({
+            chainId: String(chainId),
+            deadLine: String(deadlineSec),
+            apikey: DODO_APIKEY,
+            slippage: String(FAROSWAP_SLIPPAGE),
+            source: ROUTE_SOURCE,
+            toTokenAddress,
+            fromTokenAddress,
+            userAddr: userAddress,
+            estimateGas: 'true',
+            fromAmount: fromAmountWei.toString(),
+        });
+
+        const headers = {
+            'accept': 'application/json, text/plain, */*',
+            'referer': FAROSWAP_REFERER,
+        };
+
+        const url = `${DODO_ROUTE_ENDPOINT}?${params.toString()}`;
+        const res = await axiosInstance.get(url, { headers });
+
+        if (!res.data || !res.data.data || !res.data.data.data) {
+            throw new Error(`Route not available (keys: ${Object.keys(res.data || {}).join(', ')})`);
+        }
+
+        const r = res.data.data;
+
+        return {
+            to: r.to,
+            data: r.data,
+            gasLimit: r.gasLimit,
+            value: r.value,
+            minReturnAmount: r.minReturnAmount,
+        };
+    } catch (err) {
+        throw new Error(`Failed to get DODO route: ${err.message}`);
+    }
+}
+
+const FARO_PAIRS = [
+    { label: 'PHRS → USDT', from: 'PHRS', to: 'USDT' },
+    { label: 'PHRS → USDC', from: 'PHRS', to: 'USDC' },
+    { label: 'USDT → PHRS', from: 'USDT', to: 'PHRS' },
+    { label: 'USDC → PHRS', from: 'USDC', to: 'PHRS' },
+    { label: 'USDT → USDC', from: 'USDT', to: 'USDC' },
+    { label: 'USDC → USDT', from: 'USDC', to: 'USDT' },
+    { label: 'WPHRS → USDT', from: 'WPHRS', to: 'USDT' },
+    { label: 'PHRS → WPHRS', from: 'PHRS', to: 'WPHRS' },
+];
+
+async function selectFaroPair(rl) {
+    console.log('\n--- FaroSwap Pairs ---');
+    FARO_PAIRS.forEach((p, i) => console.log(`${i + 1}. ${p.label}`));
+    console.log(`${FARO_PAIRS.length + 1}. Custom pair (manual tokens)`);
+
+    const choice = await askQuestion(`${colors.yellow}[?] Select a pair (1-${FARO_PAIRS.length + 1}): ${colors.reset}`, rl);
+    const idx = parseInt(choice.trim(), 10);
+
+    if (idx >= 1 && idx <= FARO_PAIRS.length) {
+        const sel = FARO_PAIRS[idx - 1];
+        return { fromSym: sel.from, toSym: sel.to };
     }
 
-    const tx = await positionManager.mint(mintParams, {
-      gasLimit: Math.ceil(Number(estimatedGas) * 1.2),
-      nonce: nonce, // Gunakan nonce yang didapat
-      ...gasOptions,
+    const fromSym = (await askQuestion(`${colors.yellow}[?] From token (PHRS/USDT/USDC/WPHRS): ${colors.reset}`, rl)).trim().toUpperCase();
+    const toSym = (await askQuestion(`${colors.yellow}[?] To token (PHRS/USDT/USDC/WPHRS): ${colors.reset}`, rl)).trim().toUpperCase();
+    return { fromSym, toSym };
+}
+
+async function runFaroswapSwapTask(accounts, proxies, rl, provider) {
+    logger.step('Starting FaroSwap Swap Task...');
+
+    const { fromSym, toSym } = await selectFaroPair(rl);
+
+    const amount = (await askQuestion(`${colors.yellow}[?] Amount per account (in ${fromSym}, e.g., 0.005): ${colors.reset}`, rl)).trim();
+    const numTx = parseInt(await askQuestion(`${colors.yellow}[?] Transactions per account: ${colors.reset}`, rl), 10);
+
+    if (!amount || isNaN(Number(amount)) || numTx <= 0) {
+        logger.error('Invalid amount or transactions count.');
+        return;
+    }
+
+    let fromToken, toToken;
+    try {
+        fromToken = tokenBySymbol(fromSym);
+        toToken = tokenBySymbol(toSym);
+    } catch (e) {
+        logger.error(e.message);
+        return;
+    }
+
+    logger.info(`Pair: ${fromSym} → ${toSym}`);
+    logger.info(`Slippage is ${FAROSWAP_SLIPPAGE}%`);
+    logger.info(`Route source: ${ROUTE_SOURCE}`);
+
+    for (const account of accounts) {
+        logger.wallet(`--- Processing Account ${account.index} ---`);
+        const proxyAgent = getProxyAgent(proxies);
+        const axiosInstance = createAxiosInstance(proxyAgent);
+        axiosInstance.defaults.headers.common['Referer'] = FAROSWAP_REFERER;
+
+        const wallet = new ethers.Wallet(account.pk, provider);
+
+        for (let i = 0; i < numTx; i++) {
+            try {
+                logger.loading(`Swap ${i + 1}/${numTx}: ${amount} ${fromSym} → ${toSym}`);
+
+                const amountWei = ethers.parseUnits(amount, fromToken.decimals);
+
+                const ok = await ensureApprovalIfNeededFaroswap(wallet, fromToken, amountWei);
+                if (!ok) {
+                    logger.error('Approval step failed.');
+                    break;
+                }
+
+                const route = await getDodoRoute(axiosInstance, {
+                    chainId: CHAIN_ID,
+                    fromTokenAddress: fromToken.address,
+                    toTokenAddress: toToken.address,
+                    fromAmountWei: amountWei,
+                    userAddress: wallet.address
+                });
+
+                const txReq = {
+                    to: route.to,
+                    data: route.data,
+                    gasLimit: route.gasLimit ? ethers.toBeHex(BigInt(route.gasLimit)) : undefined,
+                    value: fromToken.isNative ? ethers.toBeHex(BigInt(route.value || '0')) : undefined
+                };
+
+                logger.loading('Submitting swap transaction...');
+                const tx = await wallet.sendTransaction(txReq);
+                logger.info(`Tx sent: ${tx.hash}`);
+                const rcpt = await tx.wait();
+                if (rcpt.status !== 1) throw new Error('Swap transaction reverted.');
+                logger.success(`Swap success. Block: ${rcpt.blockNumber}`);
+                logger.info(`Min return (raw): ${route.minReturnAmount}`);
+
+                await delay(4000);
+            } catch (err) {
+                logger.error(`Swap failed: ${err.message}`);
+                await delay(4000);
+            }
+        }
+        await delay(3000);
+    }
+    logger.step('FaroSwap task complete for all accounts.');
+}
+
+async function runFaroswapAddLiquidityTask(accounts, proxies, rl, provider) {
+    logger.step('Starting FaroSwap Add Liquidity (WPHRS/USDT) Task...');
+
+    const numTxInput = await askQuestion(`${colors.yellow}[?] Transactions per account: ${colors.reset}`, rl);
+    const numTx = parseInt(numTxInput.trim(), 10);
+
+    if (isNaN(numTx) || numTx <= 0) {
+        logger.error('Invalid transactions count. Returning to menu.');
+        return;
+    }
+
+    logger.info(`Will add liquidity with fixed amounts:`);
+    logger.info(` - ${ethers.formatUnits(LIQUIDITY_AMOUNT_A_WEI, LIQUIDITY_TOKEN_A_OBJ.decimals)} ${LIQUIDITY_TOKEN_A_OBJ.symbol}`);
+    logger.info(` - ${ethers.formatUnits(LIQUIDITY_AMOUNT_B_WEI, LIQUIDITY_TOKEN_B_OBJ.decimals)} ${LIQUIDITY_TOKEN_B_OBJ.symbol}`);
+
+    for (const account of accounts) {
+        logger.wallet(`--- Processing Account ${account.index} ---`);
+        const wallet = new ethers.Wallet(account.pk, provider);
+        const tokenAContract = new ethers.Contract(LIQUIDITY_TOKEN_A_OBJ.address, ERC20_ABI, wallet);
+        const tokenBContract = new ethers.Contract(LIQUIDITY_TOKEN_B_OBJ.address, ERC20_ABI, wallet);
+        const routerContract = new ethers.Contract(FAROSWAP_LIQUIDITY_ROUTER_ADDRESS, FAROSWAP_LIQUIDITY_ROUTER_ABI, wallet);
+
+        for (let i = 0; i < numTx; i++) {
+            logger.loading(`Starting transaction ${i + 1} of ${numTx} for account ${account.index}`);
+            try {
+
+                logger.loading(`Approving ${LIQUIDITY_TOKEN_A_OBJ.symbol}...`);
+                const approvedA = await approveToken(wallet, tokenAContract, FAROSWAP_LIQUIDITY_ROUTER_ADDRESS, LIQUIDITY_AMOUNT_A_WEI);
+                if (!approvedA) {
+                    logger.error(`Approval failed for ${LIQUIDITY_TOKEN_A_OBJ.symbol}. Skipping tx.`);
+                    continue;
+                }
+                logger.loading(`Approving ${LIQUIDITY_TOKEN_B_OBJ.symbol}...`);
+                const approvedB = await approveToken(wallet, tokenBContract, FAROSWAP_LIQUIDITY_ROUTER_ADDRESS, LIQUIDITY_AMOUNT_B_WEI);
+                if (!approvedB) {
+                    logger.error(`Approval failed for ${LIQUIDITY_TOKEN_B_OBJ.symbol}. Skipping tx.`);
+                    continue;
+                }
+                const deadline = Math.floor(Date.now() / 1000) + 900;
+                logger.loading('Sending addLiquidity transaction...');
+
+                const tx = await routerContract.addLiquidity(
+                    LIQUIDITY_TOKEN_A_OBJ.address,
+                    LIQUIDITY_TOKEN_B_OBJ.address,
+                    LIQUIDITY_FEE_UINT,
+                    LIQUIDITY_AMOUNT_A_WEI,
+                    LIQUIDITY_AMOUNT_B_WEI,
+                    LIQUIDITY_AMOUNT_A_MIN_WEI,
+                    LIQUIDITY_AMOUNT_B_MIN_WEI,
+                    wallet.address,
+                    deadline
+                );
+
+                logger.info(`Add Liquidity tx sent: ${tx.hash}`);
+                const receipt = await tx.wait();
+                if (receipt.status !== 1) throw new Error('Add Liquidity transaction reverted.');
+
+                logger.success(`Add Liquidity success! Block: ${receipt.blockNumber}`);
+
+                await delay(10000);
+
+            } catch (err) {
+                logger.error(`Add Liquidity failed: ${err.message.slice(0, 200)}...`);
+                await delay(5000);
+            }
+        }
+        await delay(3000);
+    }
+    logger.step('FaroSwap Add Liquidity task complete for all accounts.');
+}
+
+async function runFaroswapMenu(accounts, proxies, rl, provider) {
+    logger.step('--- FaroSwap Menu ---');
+    console.log('1. Swap Tokens');
+    console.log('2. Add Liquidity');
+    console.log('3. Back to Main Menu');
+
+    const choice = await askQuestion(`${colors.yellow}[?] Select an option (1-3): ${colors.reset}`, rl);
+
+    switch (choice.trim()) {
+        case '1':
+            await runFaroswapSwapTask(accounts, proxies, rl, provider);
+            break;
+        case '2':
+            await runFaroswapAddLiquidityTask(accounts, proxies, rl, provider);
+            break;
+        case '3':
+            logger.info('Returning to main menu...');
+            return;
+        default:
+            logger.error('Invalid option. Returning to main menu.');
+    }
+}
+
+/**
+ * * @param {ethers.Wallet} wallet
+ * @param {string} proxyString
+ * @returns {Promise<{success: boolean, txHash: string | null}>}
+ */
+async function claimFaucet(wallet, proxyString) {
+    const claimUrl = 'https://api.dodoex.io/gas-faucet-server/faucet/claim';
+    const payload = {
+        chainId: CHAIN_ID,
+        address: wallet.address
+    };
+    const headers = {
+        "accept": "*/*",
+        "accept-language": "en-US,en;q=0.9",
+        "content-type": "application/json",
+        "priority": "u=1, i",
+        "Referer": "https://faroswap.xyz/",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+    };
+
+    let agent = null;
+    let proxyHost = 'None';
+    if (proxyString) {
+        try {
+            agent = new HttpsProxyAgent(proxyString);
+            proxyHost = new URL(proxyString).hostname;
+        } catch (e) {
+            logger.error(`Proxy format not valid: ${proxyString}. Using direct mode.`);
+            proxyHost = 'Invalid Format';
+        }
+    }
+
+    try {
+        logger.loading(`Attempting claim for wallet: ${wallet.address} (Proxy: ${proxyHost})`);
+        const response = await axios.post(claimUrl, payload, {
+            headers,
+            httpsAgent: agent
+        });
+
+        if (response.data && response.data.code === 0) {
+            logger.success(`SUCCESS: ${response.data.msg}`);
+            saveRandomWallet(wallet);
+            return { success: true, txHash: response.data.data.txHash };
+        } else {
+            logger.warn(`FAILED: ${response.data.msg || 'Unknown server error'}`);
+            return { success: false, txHash: null };
+        }
+    } catch (error) {
+        logger.error(`ERROR: Failed to send request for ${wallet.address} (Proxy: ${proxyHost})`);
+        if (error.response) {
+            logger.error(`   - Status: ${error.response.status}`);
+            logger.error(`   - Data: ${JSON.stringify(error.response.data)}`);
+        } else {
+            logger.error(`   - Message: ${error.message}`);
+        }
+        return { success: false, txHash: null };
+    }
+}
+
+async function sendPHRS(senderWallet, destinationAddress, provider) {
+    logger.loading(`Attempting to send ${PHRS_TO_SEND} PHRS from ${senderWallet.address} to ${destinationAddress}...`);
+
+    try {
+        const signer = senderWallet.connect(provider);
+        const tx = {
+            to: destinationAddress,
+            value: ethers.parseEther(PHRS_TO_SEND)
+        };
+        const txResponse = await signer.sendTransaction(tx);
+        logger.loading(`Transaction sent. Waiting for confirmation... (Hash: ${txResponse.hash})`);
+        await txResponse.wait();
+        logger.success('Transaction complete!');
+        logger.info(`View on explorer: ${EXPLORER_URL}/tx/${txResponse.hash}`);
+    } catch (error) {
+        logger.error(`Transaction failed: ${error.message}`);
+        if (error.code === 'INSUFFICIENT_FUNDS' || (error.message && error.message.includes('insufficient funds'))) {
+            logger.error('   - Cause: Insufficient funds. Faucet claim might have failed or RPC node is slow.');
+        } else if (error.code === 'CALL_EXCEPTION') {
+            logger.error('   - Cause: CALL_EXCEPTION. This often means insufficient funds or an issue with the destination address.');
+        }
+    }
+}
+
+async function runFaucetTask(accounts, proxies, rl, provider) {
+    logger.step('--- Starting Faucet Claim & Send Task ---');
+
+    if (!proxies || proxies.length === 0) {
+        logger.error('No proxies loaded. This task requires proxies. Returning to menu.');
+        return;
+    }
+    logger.info(`Loaded ${proxies.length} proxies for this task.`);
+
+    const numWalletsStr = await askQuestion(`${colors.yellow}[?] How many wallets do you want to process? ${colors.reset}`, rl);
+    const numWallets = parseInt(numWalletsStr, 10);
+
+    if (isNaN(numWallets) || numWallets <= 0) {
+        logger.error('Invalid input. Please enter a positive number. Returning to menu.');
+        return;
+    }
+    logger.info(`OK, processing ${numWallets} wallet(s)...`);
+
+    const destinationAddress = await askQuestion(`${colors.yellow}[?] Enter your destination address: ${colors.reset}`, rl);
+
+    if (!ethers.isAddress(destinationAddress)) {
+        logger.error('Invalid destination address. Returning to menu.');
+        return;
+    }
+
+    logger.info(`All successful claims will send ${PHRS_TO_SEND} PHRS to: ${destinationAddress}`);
+
+    for (let i = 0; i < numWallets; i++) {
+        logger.step(`--- Processing Wallet ${i + 1} / ${numWallets} ---`);
+
+        const currentProxy = proxies[i % proxies.length];
+        const wallet = ethers.Wallet.createRandom();
+
+        const claimResult = await claimFaucet(wallet, currentProxy);
+
+        if (claimResult.success && claimResult.txHash) {
+
+            logger.info('Faucet claim successful. Waiting for faucet funds to arrive...');
+            logger.loading(`Waiting for confirmation of Tx: ${claimResult.txHash}`);
+
+            try {
+                const receipt = await provider.waitForTransaction(claimResult.txHash, 1, 60000);
+
+                if (receipt.status === 1) {
+                    logger.success(`Faucet funds confirmed in block ${receipt.blockNumber}.`);
+                    logger.info('Waiting 5 seconds for RPC node to sync balance...');
+                    await delay(5000); 
+
+                    logger.info('Now, sending PHRS...');
+                    await sendPHRS(wallet, destinationAddress, provider);
+                } else {
+                    logger.error(`Faucet transaction FAILED (reverted). Tx: ${claimResult.txHash}`);
+                    logger.warn('Skipping PHRS send for this wallet.');
+                }
+            } catch (waitError) {
+                logger.error(`Error waiting for faucet transaction: ${waitError.message}`);
+                logger.warn('Skipping PHRS send for this wallet.');
+            }
+        } else {
+            logger.warn('Faucet claim failed. Skipping PHRS send for this wallet.');
+        }
+
+        if (i < numWallets - 1) {
+            logger.info(`Wallet ${i + 1} complete. Waiting 2 seconds before next...`);
+            await delay(2000); 
+        }
+    }
+
+    logger.step('Faucet task complete for all wallets.');
+}
+
+async function showMainMenu() {
+    const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
     });
 
-    incrementWalletNonce(wallet.address); // Increment nonce setelah transaksi dikirim
-    logger.loading(`Liquidity Add ${index + 1} sent, waiting for confirmation...`);
-    const receipt = await waitForTransactionWithRetry(provider, tx.hash);
-    logger.success(`Liquidity Add ${index + 1} completed: ${receipt.hash}`);
-    logger.step(`Explorer: https://testnet.pharosscan.xyz/tx/${receipt.hash}`);
+    try {
 
-    await verifyTask(wallet, proxy, jwt, receipt.hash);
-  } catch (error) {
-    logger.error(`Liquidity Add ${index + 1} failed: ${error.message}`);
-    if (error.transaction) {
-      logger.error(`Transaction details: ${JSON.stringify(error.transaction, null, 2)}`);
+        logger.banner();
+
+        const proxies = loadProxies();
+        const accounts = loadAccounts();
+        const provider = new ethers.JsonRpcProvider(PHAROS_RPC_URL);
+
+        logger.step('Starting Pharos Login, Check-in & Info Fetch for all accounts...');
+        for (const account of accounts) {
+            logger.wallet(`--- Processing Account ${account.index} ---`);
+            const proxyAgent = getProxyAgent(proxies);
+            const axiosInstance = createAxiosInstance(proxyAgent);
+            const wallet = new ethers.Wallet(account.pk, provider);
+
+            const pharosJwt = await pharosLogin(wallet, axiosInstance);
+
+            if (!pharosJwt) {
+                logger.error(`Pharos login failed for account ${account.index}. Skipping.`);
+                await delay(3000);
+                continue;
+            }
+
+            await pharosCheckInAndProfile(wallet, pharosJwt, axiosInstance);
+            await delay(3000);
+        }
+        logger.step('Initial Check-in & Profile Fetch complete for all accounts.');
+
+        while (true) {
+            console.log('\n--- Main Menu ---');
+            console.log('1. Pharos Send Task');
+            console.log('2. Asseto Subscribe/Redeem Task');
+            console.log('3. FaroSwap (Swap / Add Liquidity)');
+            console.log('4. Faucet');
+            console.log('5. Exit');
+
+            const choice = await askQuestion(`${colors.yellow}[?] Select an option (1-5): ${colors.reset}`, rl);
+
+            switch (choice.trim()) {
+                case '1':
+                    await runPharosSend(accounts, proxies, rl, provider);
+                    break;
+                case '2':
+                    await runAssetoTask(accounts, proxies, rl, provider);
+                    break;
+                case '3':
+                    await runFaroswapMenu(accounts, proxies, rl, provider);
+                    break;
+                case '4': 
+                    await runFaucetTask(accounts, proxies, rl, provider);
+                    break;
+                case '5':
+                    logger.info('Exiting. Goodbye!');
+                    rl.close();
+                    return;
+                default:
+                    logger.error('Invalid option. Please choose 1-5.');
+            }
+        }
+    } catch (err) {
+        logger.error(`An unexpected error occurred: ${err.message}`);
+        rl.close();
     }
-    if (error.receipt) {
-      logger.error(`Receipt: ${JSON.stringify(error.receipt, null, 2)}`);
-    }
-    // Jika ada error, coba perbarui nonce dari jaringan
-    if (error.message.includes('nonce has already been used') || error.message.includes('TX_REPLAY_ATTACK')) {
-        logger.warn('Nonce issue detected after LP failure, refreshing nonce...');
-        walletNonces[wallet.address] = await wallet.provider.getTransactionCount(wallet.address, 'latest');
-    }
-  }
-};
+}
 
-const getUserDelay = () => {
-  let delayMinutes = process.env.DELAY_MINUTES;
-  if (!delayMinutes) {
-    delayMinutes = prompt('Enter delay between cycles in minutes (e.g., 30): ');
-  }
-  const minutes = parseInt(delayMinutes, 10);
-  if (isNaN(minutes) || minutes <= 0) {
-    logger.error('Invalid delay input, using default 30 minutes');
-    return 30;
-  }
-  return minutes;
-};
+async function runPharosSend(accounts, proxies, rl, provider) {
+    logger.step('Starting Pharos Send Task...');
 
-const countdown = async (minutes) => {
-  const totalSeconds = minutes * 60;
-  logger.info(`Starting ${minutes}-minute countdown...`);
+    const amount = await askQuestion(`${colors.yellow}[?] Enter PHRS amount to send (e.g., 0.001): ${colors.reset}`, rl);
+    const numTx = parseInt(await askQuestion(`${colors.yellow}[?] Enter number of transactions per account: ${colors.reset}`, rl), 10);
+    const addressMode = await askQuestion(`${colors.yellow}[?] Choose address mode: (1) Manual (2) Random: ${colors.reset}`, rl);
 
-  for (let seconds = totalSeconds; seconds >= 0; seconds--) {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    process.stdout.write(`\r${colors.cyan}Time remaining: ${mins}m ${secs}s${colors.reset} `);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-  process.stdout.write('\rCountdown complete! Restarting process...\n');
-};
-
-const main = async () => {
-  logger.banner();
-
-  const delayMinutes = getUserDelay();
-  logger.info(`Delay between cycles set to ${delayMinutes} minutes`);
-
-  const proxies = loadProxies();
-  const privateKeys = [process.env.PRIVATE_KEY_1, process.env.PRIVATE_KEY_2].filter(pk => pk);
-  if (!privateKeys.length) {
-    logger.error('No private keys found in .env');
-    return;
-  }
-
-  const numTransfers = 5;
-  const numWraps = 4;
-  const numSwaps = 3;
-  const numLPs = 2;
-
-  while (true) {
-    for (const privateKey of privateKeys) {
-      const proxy = proxies.length ? getRandomProxy(proxies) : null;
-      const provider = setupProvider(proxy);
-      const wallet = new ethers.Wallet(privateKey, provider);
-
-      // Inisialisasi nonce untuk wallet ini saat pertama kali digunakan dalam siklus
-      walletNonces[wallet.address] = await provider.getTransactionCount(wallet.address, 'latest');
-      logger.wallet(`Using wallet: ${wallet.address} (Initial Nonce: ${walletNonces[wallet.address]})`);
-
-
-      await claimFaucet(wallet, proxy);
-
-      const jwt = await performCheckIn(wallet, proxy);
-      if (jwt) {
-        await getUserInfo(wallet, proxy, jwt);
-      } else {
-        logger.error('Skipping user info fetch due to failed check-in');
-      }
-
-      console.log(`\n${colors.cyan}------------------------${colors.reset}`);
-      console.log(`${colors.cyan}TRANSFERS${colors.reset}`);
-      console.log(`${colors.cyan}------------------------${colors.reset}`);
-      for (let i = 0; i < numTransfers; i++) {
-        await transferPHRS(wallet, provider, i, jwt, proxy);
-        // Tambahkan delay kecil antar transaksi untuk memberi waktu node memperbarui nonce
-        await new Promise(resolve => setTimeout(resolve, Math.random() * 3000 + 2000)); // Delay 2-5 detik
-      }
-
-      console.log(`\n${colors.cyan}------------------------${colors.reset}`);
-      console.log(`${colors.cyan}WRAP${colors.reset}`);
-      console.log(`${colors.cyan}------------------------${colors.reset}`);
-      for (let i = 0; i < numWraps; i++) {
-        await wrapPHRS(wallet, provider, i, jwt, proxy);
-        await new Promise(resolve => setTimeout(resolve, Math.random() * 3000 + 2000)); // Delay 2-5 detik
-      }
-
-      console.log(`\n${colors.cyan}------------------------${colors.reset}`);
-      console.log(`${colors.cyan}SWAP${colors.reset}`);
-      console.log(`${colors.cyan}------------------------${colors.reset}`);
-      for (let i = 0; i < numSwaps; i++) {
-        await performSwap(wallet, provider, i, jwt, proxy);
-        await new Promise(resolve => setTimeout(resolve, Math.random() * 3000 + 2000)); // Delay 2-5 detik
-      }
-
-      console.log(`\n${colors.cyan}------------------------${colors.reset}`);
-      console.log(`${colors.cyan}ADD LP${colors.reset}`);
-      console.log(`${colors.cyan}------------------------${colors.reset}`);
-      for (let i = 0; i < numLPs; i++) {
-        await addLiquidity(wallet, provider, i, jwt, proxy);
-        await new Promise(resolve => setTimeout(resolve, Math.random() * 3000 + 2000)); // Delay 2-5 detik
-      }
+    let manualAddress = '';
+    if (addressMode === '1') {
+        manualAddress = await askQuestion(`${colors.yellow}[?] Enter the single recipient address: ${colors.reset}`, rl);
+        if (!ethers.isAddress(manualAddress)) {
+            logger.error('Invalid address.');
+            return;
+        }
     }
 
-    logger.success('All actions completed for all wallets!');
-    await countdown(delayMinutes);
-  }
-};
+    const randomWallets = (addressMode === '2') ? loadRandomWallets() : [];
 
-main().catch(error => {
-  logger.error(`Bot failed: ${error.message}`);
-  process.exit(1);
-});
+    for (const account of accounts) {
+        logger.wallet(`--- Processing Account ${account.index} ---`);
 
+        const proxyAgent = getProxyAgent(proxies);
+        const axiosInstance = createAxiosInstance(proxyAgent);
+        const wallet = new ethers.Wallet(account.pk, provider);
+
+        const pharosJwt = await pharosLogin(wallet, axiosInstance);
+        if (!pharosJwt) {
+            logger.error(`Pharos login failed for account ${account.index}. Skipping 'Send' tasks for this account.`);
+            await delay(3000);
+            continue;
+        }
+
+        for (let i = 0; i < numTx; i++) {
+            logger.loading(`Starting transaction ${i + 1} of ${numTx} for account ${account.index}`);
+            let toAddress = manualAddress;
+
+            if (addressMode === '2') {
+                if (randomWallets.length > 0) {
+                    toAddress = randomWallets[Math.floor(Math.random() * randomWallets.length)].address;
+                } else {
+                    logger.warn('No random wallets in wallets.json, generating a new one...');
+                    const newWallet = ethers.Wallet.createRandom();
+                    toAddress = newWallet.address;
+                    saveRandomWallet(newWallet);
+                    randomWallets.push({ address: newWallet.address, privateKey: newWallet.privateKey });
+                }
+            }
+
+            if (toAddress.toLowerCase() === wallet.address.toLowerCase()) {
+                logger.warn('Skipping send to self. Getting new random address.');
+                const newWallet = ethers.Wallet.createRandom();
+                toAddress = newWallet.address;
+                saveRandomWallet(newWallet);
+                randomWallets.push({ address: newWallet.address, privateKey: newWallet.privateKey });
+            }
+
+            await pharosSend(wallet, toAddress, amount, axiosInstance, pharosJwt);
+            await delay(5000);
+        }
+        await delay(3000);
+    }
+    logger.step('Pharos Send task complete for all accounts.');
+}
+
+async function runAssetoTask(accounts, proxies, rl, provider) {
+    logger.step('Starting Asseto Task...');
+
+    console.log('--- Asseto Menu ---');
+    console.log('1. Subscribe (Deposit USDT)');
+    console.log('2. Redeem (Withdraw CASH+)');
+    const choice = await askQuestion(`${colors.yellow}[?] Select an option (1-2): ${colors.reset}`, rl);
+
+    if (choice !== '1' && choice !== '2') {
+        logger.error('Invalid choice.');
+        return;
+    }
+
+    const tokenName = (choice === '1') ? 'USDT' : 'CASH+';
+    const amount = await askQuestion(`${colors.yellow}[?] Enter ${tokenName} amount (e.g., 1.5): ${colors.reset}`, rl);
+    const numTx = parseInt(await askQuestion(`${colors.yellow}[?] Enter number of transactions per account: ${colors.reset}`, rl), 10);
+
+    for (const account of accounts) {
+        logger.wallet(`--- Processing Account ${account.index} ---`);
+        const proxyAgent = getProxyAgent(proxies);
+        const assetoAxiosInstance = createAxiosInstance(proxyAgent);
+        const wallet = new ethers.Wallet(account.pk, provider);
+
+        const assetoJwt = await getAssetoJwt(wallet, assetoAxiosInstance);
+        if (!assetoJwt) {
+            logger.error(`Could not log in to Asseto for account ${account.index}. Skipping.`);
+            continue;
+        }
+
+        assetoAxiosInstance.defaults.headers.common['Authorization'] = assetoJwt;
+
+        for (let i = 0; i < numTx; i++) {
+            logger.loading(`Starting transaction ${i + 1} of ${numTx} for account ${account.index}`);
+
+            if (choice === '1') {
+                await assetoSubscribe(wallet, amount);
+            } else {
+                await assetoRedeem(wallet, amount);
+            }
+            await delay(10000);
+        }
+        await delay(3000);
+    }
+    logger.step('Asseto task complete for all accounts.');
+}
+
+showMainMenu();
